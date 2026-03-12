@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 BRAIN T₀ v5.0</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.reload()">
+            <div class="logo-icon">🧠</div>
+            <div class="logo-text">
+                <span class="logo-name">BRAIN</span>
+                <span class="logo-version">T₀ v5.0</span>
+            </div>
+        </div>
+        
+        <div class="header-controls">
+            <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
+            <div class="threat-indicator" id="threatIndicator" title="Уровень угрозы">🟢</div>
+            <div class="ws-indicator" id="wsIndicator" title="WebSocket">⚫</div>
+            <div class="architect-badge" id="architectBadge" style="display: none; cursor: pointer;" onclick="openAdminPanel()" title="Кабинет архитектора">👑</div>
+            
+            <select id="levelSelect" class="level-select">
+                <option value="S0">S0 Free</option>
+                <option value="S1">S1 $0.1</option>
+                <option value="S2">S2 $0.5</option>
+                <option value="S3" selected>S3 $1</option>
+                <option value="S4">S4 $2</option>
+                <option value="S5">S5 $5</option>
+                <option value="S6">S6 $10</option>
+            </select>
+            
+            <select id="providerSelect" class="provider-select">
+                <option value="auto" selected>🤖 Auto</option>
+                <option value="deepseek">🧠 DeepSeek</option>
+                <option value="claude">🎭 Claude</option>
+                <option value="openai">📚 GPT-5.4</option>
+                <option value="gemini">✨ Gemini</option>
+            </select>
+            
+            <button id="profileBtn" class="icon-btn" onclick="openProfile()" title="Мой кабинет">👤</button>
+            <button id="settingsBtn" class="icon-btn" onclick="openSettings()">⚙️</button>
+            <button id="walletBtn" class="wallet-btn" onclick="connectWallet()">🦊 MetaMask</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">💎 Кристаллы</span>
+                <span class="crystal-count" id="crystalCount">0</span>
+            </div>
+            
+            <div class="sidebar-search">
+                <input type="text" id="searchInput" placeholder="Поиск кристаллов..." class="search-input">
+            </div>
+            
+            <div class="sidebar-filters">
+                <button class="filter-btn active" onclick="setFilter('all')">Все</button>
+                <button class="filter-btn" onclick="setFilter('verified')">✅</button>
+                <button class="filter-btn" onclick="setFilter('quarantine')">🔬</button>
+                <button class="filter-btn" onclick="setFilter('virus')">🦠</button>
+                <button class="filter-btn" onclick="setFilter('diamond')">💎</button>
+            </div>
+            
+            <div class="crystal-list" id="crystalList"></div>
+            
+            <div class="sidebar-footer">
+                <button class="sidebar-btn" onclick="syncFromDB()">☁️ Синхр.</button>
+                <button class="sidebar-btn" onclick="exportCrystals()">📥 Экспорт</button>
+                <button class="sidebar-btn" onclick="importCrystals()">📤 Импорт</button>
+                <button class="sidebar-btn" onclick="clearHistory()">🗑️</button>
+            </div>
+            
+            <div class="sidebar-stats" id="sidebarStats">
+                <div class="stat-item">
+                    <span class="stat-value" id="statTotal">0</span>
+                    <span class="stat-label">всего</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statDiamonds">0</span>
+                    <span class="stat-label">💎</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statVerified">0</span>
+                    <span class="stat-label">✅</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statVirus">0</span>
+                    <span class="stat-label">🦠</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat">
+            <div class="progress-bar" id="progressBar" style="display: none;"></div>
+            
+            <div class="messages" id="messages">
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-icon">🧠</div>
+                    <h1>BRAIN T₀ v5.0</h1>
+                    <p>69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD</p>
+                    <div class="main-formula">1^(∞-1)/2ⁿ = 1</div>
+                    <div class="tomes-grid">
+                        <div class="tome-item">Том 1: Аксиоматика</div>
+                        <div class="tome-item">Том 2: Математика</div>
+                        <div class="tome-item">Том 3: Физика</div>
+                        <div class="tome-item">Том 4: Химия</div>
+                        <div class="tome-item">Том 5: Биология</div>
+                        <div class="tome-item">Том 6: Психология</div>
+                        <div class="tome-item">Том 7: Философия</div>
+                        <div class="tome-item">Том 8: Синтез</div>
+                        <div class="tome-item">Том 9: Безопасность</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-row">
+                    <span class="suggest-label">Рек. уровень: <span id="suggestLevel">S3</span></span>
+                    <span class="suggest-link" onclick="applySuggestedLevel()">(применить)</span>
+                    <span class="input-hint">· Enter — отправить</span>
+                    <span class="input-hint">· Shift+Enter — перенос</span>
+                    <label class="stream-toggle">
+                        <input type="checkbox" id="streamToggle" checked> Stream
+                    </label>
+                </div>
+                
+                <div class="input-wrapper">
+                    <textarea 
+                        id="userInput" 
+                        placeholder="Задайте вопрос Brain T₀..." 
+                        rows="1"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn" onclick="sendMessage()">➤</button>
+                    <button id="stopBtn" class="stop-btn" onclick="stopGeneration()" style="display: none;">■</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Настройки</h3>
+                <span class="close-btn" onclick="closeSettings()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="settings-group">
+                    <label>🌐 Сервер API</label>
+                    <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
+                </div>
+                
+                <div class="settings-group">
+                    <label>🤖 Провайдер ключа</label>
+                    <select id="keyProvider">
+                        <option value="deepseek">🧠 DeepSeek</option>
+                        <option value="claude">🎭 Claude</option>
+                        <option value="openai">📚 OpenAI (GPT-5.4)</option>
+                        <option value="gemini">✨ Gemini</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label>🔑 API ключ провайдера</label>
+                    <input type="password" id="apiKey" placeholder="sk-...">
+                    <small id="apiKeyHint">Сохранится на сервер · platform.deepseek.com → API Keys</small>
+                </div>
+                <div class="settings-group" id="savedKeysGroup">
+                    <label>💾 Сохранённые ключи</label>
+                    <div id="savedKeysList" style="font-size:13px;color:var(--text-2-dark);">Загрузка...</div>
+                </div>
+                
+                <div class="settings-group">
+                    <label>👑 Ключ архитектора (2FA)</label>
+                    <input type="password" id="architectKey" placeholder="Для полного доступа">
+                </div>
+                
+                <div class="settings-group">
+                    <label>💰 Кошелёк для оплаты</label>
+                    <input type="text" id="ownerWallet" placeholder="0x...">
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSettings()">Отмена</button>
+                <button class="btn-primary" onclick="saveSettings()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Модальное окно пользовательского соглашения -->
+    <div id="termsModal" class="terms-modal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h2>🧠 BRAIN T₀ v5.0</h2>
+                <h3>Пользовательское соглашение</h3>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-language-selector">
+                    <button onclick="loadTerms('ru')" class="lang-btn active" id="langRu">Русский</button>
+                    <button onclick="loadTerms('en')" class="lang-btn" id="langEn">English</button>
+                </div>
+                <div class="terms-content" id="termsContent">Загрузка...</div>
+                <div class="terms-checkbox">
+                    <label>
+                        <input type="checkbox" id="termsAgreeCheckbox">
+                        <span>Я прочитал и согласен с условиями пользовательского соглашения</span>
+                    </label>
+                </div>
+            </div>
+            <div class="terms-modal-footer">
+                <button id="termsDeclineBtn" class="terms-btn terms-btn-decline" onclick="declineTerms()">Отказаться</button>
+                <button id="termsAcceptBtn" class="terms-btn terms-btn-accept" onclick="acceptTerms()" disabled>Принять</button>
+            </div>
+            <div class="terms-modal-footer-note">* Отказ означает перенаправление на google.com</div>
+        </div>
+    </div>
+    <div id="termsOverlay" class="terms-overlay" style="display: none;"></div>
+
+    <!-- Футер -->
+    <footer style="text-align:center; padding:12px; color:var(--text-3-dark); font-size:11px;">
+        <a href="#" onclick="showTermsModal(); return false;" style="color:var(--text-2-dark);">Соглашение</a> |
+        © 2026 Юрий Сунуров
+    </footer>
+
+    <!-- 👑 КАБИНЕТ АРХИТЕКТОРА -->
+    <div id="adminPanel" class="admin-panel" style="display:none;">
+        <div class="admin-overlay" onclick="closeAdminPanel()"></div>
+        <div class="admin-content">
+            <div class="admin-header">
+                <h2>👑 Кабинет архитектора</h2>
+                <div class="admin-tabs">
+                    <button class="admin-tab active" onclick="showAdminTab('stats')">📊 Статистика</button>
+                    <button class="admin-tab" onclick="showAdminTab('users')">👥 Пользователи</button>
+                    <button class="admin-tab" onclick="showAdminTab('crystals')">💎 Кристаллы</button>
+                    <button class="admin-tab" onclick="showAdminTab('attacks')">🛡️ Атаки</button>
+                    <button class="admin-tab" onclick="showAdminTab('prompts')">✏️ Промпты</button>
+                    <button class="admin-tab" onclick="showAdminTab('levels')">⚙️ Уровни</button>
+                    <button class="admin-tab" onclick="showAdminTab('economy')">💰 Экономика</button>
+                </div>
+                <span class="admin-close" onclick="closeAdminPanel()">&times;</span>
+            </div>
+            <div class="admin-body" id="adminBody">
+                <div class="admin-loading">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👤 ЛИЧНЫЙ КАБИНЕТ -->
+    <div id="profileModal" class="modal" style="display:none;">
+        <div class="modal-content profile-modal-content">
+            <div class="modal-header">
+                <h3>👤 Мой кабинет</h3>
+                <span class="close-btn" onclick="closeProfile()">&times;</span>
+            </div>
+            <div class="modal-body" id="profileBody">
+                <div style="text-align:center;padding:40px;opacity:.5">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/client.js"></script>
+</body>
+</html>
