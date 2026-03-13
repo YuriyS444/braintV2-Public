@@ -363,7 +363,6 @@ if (!token && level !== 'S0') {
     if (!token) return;
     }
     
-    const level = elements.levelSelect.value;
     const useStream = elements.streamToggle.checked;
     
     elements.userInput.value = '';
