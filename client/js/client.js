@@ -357,9 +357,10 @@ async function sendMessage() {
     return;
     }
     
-    if (!token) {
-        await login();
-        if (!token) return;
+   const level = elements.levelSelect.value;
+if (!token && level !== 'S0') {
+    await login();
+    if (!token) return;
     }
     
     const level = elements.levelSelect.value;
