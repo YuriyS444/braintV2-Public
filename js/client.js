@@ -357,7 +357,7 @@ async function sendMessage() {
     return;
 }
     
-    const level = elements.levelSelect.value;
+const level = elements.levelSelect.value;
 if (!token && level !== 'S0') {
     await login();
     if (!token) return;
