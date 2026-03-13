@@ -1,5 +1,5 @@
 const CONFIG = {
-    API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://brain-t0.up.railway.app',
+    API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
     ARCHITECT_KEY: sessionStorage.getItem('brain_architect_key') || '',
     OWNER_WALLET: localStorage.getItem('brain_owner_wallet') || '',
