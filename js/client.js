@@ -352,10 +352,10 @@ async function sendMessage() {
     const question = elements.userInput.value.trim();
     if (!question) return;
     
-    if (!CONFIG.API_URL || !CONFIG.API_KEY) {
-        openSettings();
-        return;
-    }
+    if (!CONFIG.API_URL) {
+    openSettings();
+    return;
+}
     
     const level = elements.levelSelect.value;
 if (!token && level !== 'S0') {
