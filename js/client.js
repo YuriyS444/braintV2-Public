@@ -353,16 +353,15 @@ async function sendMessage() {
     if (!question) return;
     
     if (!CONFIG.API_URL) {
-    openSettings();
-    return;
-}
-    
-const level = elements.levelSelect.value;
-if (!token && level !== 'S0') {
-    await login();
-    if (!token) return;
-}
-    
+        openSettings();
+        return;
+    }
+
+    const level = elements.levelSelect.value;
+    if (!token && level !== 'S0') {
+        await login();
+        if (!token) return;
+    }
     const useStream = elements.streamToggle.checked;
     
     elements.userInput.value = '';
