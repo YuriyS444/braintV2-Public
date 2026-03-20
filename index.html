@@ -410,8 +410,14 @@
         if (pwaBtn) pwaBtn.textContent = t.pwaBtn;
     }
 
-    // Применяем язык при загрузке
-    applyLang();
+    // Применяем язык после полной загрузки DOM
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", applyLang);
+    } else {
+        applyLang();
+    }
+    // Повторно применяем после загрузки client.js
+    window.addEventListener("load", applyLang);
 
     // ── Голосовой ввод ──
     let recognition = null;
