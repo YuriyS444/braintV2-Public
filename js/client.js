@@ -1058,7 +1058,7 @@ async function saveSettings() {
 async function loadSavedKeys() {
     const container = document.getElementById('savedKeysList');
     if (!container || !token) {
-        if (container) container.textContent = 'Подключите кошелёк для управления ключами';
+        if (container) container.textContent = navigator.language?.startsWith('ru') ? 'Подключите кошелёк для управления ключами' : 'Connect wallet to manage keys';
         return;
     }
     try {
