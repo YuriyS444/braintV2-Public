@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🧠 BRAIN T₀ v5.0</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="../manifest.json">
+    <link rel="manifest" href="/braintV2-Public/manifest.json">
     <meta name="theme-color" content="#7c6af7">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BRAIN T₀">
@@ -48,12 +49,7 @@
                 <option value="gemini">✨ Gemini</option>
             </select>
 
-            <!-- Переключатель языка -->
-            <div class="lang-switch">
-                <button class="lang-switch-btn active" id="langBtnRu" onclick="setLang('ru')">RU</button>
-                <button class="lang-switch-btn" id="langBtnEn" onclick="setLang('en')">EN</button>
-            </div>
-            
+
             <button id="profileBtn" class="icon-btn" onclick="openProfile()" title="Мой кабинет">👤</button>
             <button id="settingsBtn" class="icon-btn" onclick="openSettings()">⚙️</button>
             <button id="walletBtn" class="wallet-btn" onclick="connectWallet()">🦊 MetaMask</button>
@@ -301,7 +297,7 @@
     <script>
     // ── Service Worker ──
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('../sw.js').catch(() => {});
+        navigator.serviceWorker.register('/braintV2-Public/sw.js').catch(() => {});
     }
 
     // ── PWA Install ──
@@ -343,36 +339,79 @@
     window.addEventListener('resize', checkMobile);
     checkMobile();
 
-    // ── Язык ──
+    // ── Язык — автоопределение по браузеру ──
     const I18N = {
         ru: {
             crystals: 'Кристаллы',
             placeholder: 'Задайте вопрос Brain T₀...',
-            send: '➤'
+            search: 'Поиск кристаллов...',
+            agree: 'Я прочитал и согласен с условиями пользовательского соглашения',
+            decline: 'Отказаться',
+            accept: 'Принять',
+            settings: 'Настройки',
+            save: 'Сохранить',
+            cancel: 'Отмена',
+            pwaInstall: '📱 Установить BRAIN T₀ как приложение',
+            pwaBtn: 'Установить',
+            fileHint: '📎 Поддерживаемые форматы: '
         },
         en: {
             crystals: 'Crystals',
             placeholder: 'Ask Brain T₀ a question...',
-            send: '➤'
+            search: 'Search crystals...',
+            agree: 'I have read and agree to the terms of service',
+            decline: 'Decline',
+            accept: 'Accept',
+            settings: 'Settings',
+            save: 'Save',
+            cancel: 'Cancel',
+            pwaInstall: '📱 Install BRAIN T₀ as an app',
+            pwaBtn: 'Install',
+            fileHint: '📎 Supported formats: '
         }
     };
 
-    // Автоопределение языка
-    const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
-    let currentLang = localStorage.getItem('brain_lang') || browserLang;
+    const PROVIDER_HINT_EN = {
+        deepseek: 'PDF, TXT, MD, CSV',
+        claude:   'PDF, TXT, images (JPG, PNG, WEBP, GIF)',
+        openai:   'PDF, TXT, images (JPG, PNG, WEBP)',
+        gemini:   'PDF, TXT, images, audio (MP3), video (MP4)',
+        auto:     'PDF, TXT, images'
+    };
 
-    function setLang(lang) {
-        currentLang = lang;
-        localStorage.setItem('brain_lang', lang);
-        document.getElementById('langBtnRu').classList.toggle('active', lang === 'ru');
-        document.getElementById('langBtnEn').classList.toggle('active', lang === 'en');
-        const t = I18N[lang];
-        document.getElementById('userInput').placeholder = t.placeholder;
+    // Автоопределение языка по браузеру
+    const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
+    const currentLang = browserLang;
+
+    function applyLang() {
+        const t = I18N[currentLang];
+        // html lang
+        document.documentElement.lang = currentLang;
+        // placeholder
+        const input = document.getElementById('userInput');
+        if (input) input.placeholder = t.placeholder;
+        // кристаллы
         document.querySelectorAll('[data-i18n="crystals"]').forEach(el => el.textContent = t.crystals);
+        // поиск
+        const search = document.getElementById('searchInput');
+        if (search) search.placeholder = t.search;
+        // соглашение checkbox
+        const agreeSpan = document.querySelector('.terms-checkbox span');
+        if (agreeSpan) agreeSpan.textContent = t.agree;
+        // кнопки соглашения
+        const declineBtn = document.getElementById('termsDeclineBtn');
+        if (declineBtn) declineBtn.textContent = t.decline;
+        const acceptBtn = document.getElementById('termsAcceptBtn');
+        if (acceptBtn) acceptBtn.textContent = t.accept;
+        // PWA banner
+        const pwaBanner = document.querySelector('.pwa-install-banner span');
+        if (pwaBanner) pwaBanner.textContent = t.pwaInstall;
+        const pwaBtn = document.querySelector('.pwa-install-btn');
+        if (pwaBtn) pwaBtn.textContent = t.pwaBtn;
     }
 
     // Применяем язык при загрузке
-    setLang(currentLang);
+    applyLang();
 
     // ── Голосовой ввод ──
     let recognition = null;
@@ -449,7 +488,8 @@
         const fileInput = document.getElementById('fileInput');
         const hint = document.getElementById('fileTypeHint');
         fileInput.accept = PROVIDER_ACCEPT[provider] || PROVIDER_ACCEPT.auto;
-        hint.textContent = '📎 Поддерживаемые форматы: ' + (PROVIDER_HINT[provider] || PROVIDER_HINT.auto);
+        const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT;
+        hint.textContent = I18N[currentLang].fileHint + (hints[provider] || hints.auto);
     }
 
     function triggerFileUpload() {
