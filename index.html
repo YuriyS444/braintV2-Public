@@ -176,7 +176,7 @@
     <div class="modal" id="settingsModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>⚙️ Настройки</h3>
+                <h3 data-i18n="settings_title">⚙️ Настройки</h3>
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="modal-body">
@@ -196,16 +196,17 @@
                 <div class="settings-group">
                     <label data-i18n="label_apikey">🔑 API ключ провайдера</label>
                     <input type="password" id="apiKey" placeholder="sk-...">
-                    <small id="apiKeyHint">Сохранится на сервер · platform.deepseek.com → API Keys</small>
+                    <small id="apiKeyHint" data-i18n="apikey_hint">Сохранится на сервер · platform.deepseek.com → API Keys</small>
                 </div>
                 <div class="settings-group" id="savedKeysGroup">
                     <label data-i18n="label_saved">💾 Сохранённые ключи</label>
                     <div id="savedKeysList" style="font-size:13px;color:var(--text-2-dark);">Загрузка...</div>
+                    <small id="savedKeysHint" data-i18n="saved_keys_hint">Подключите кошелёк для управления ключами</small>
                 </div>    
                 <div class="settings-group">
                     <label data-i18n="label_wallet">💰 Кошелёк для оплаты</label>
                     <input type="text" id="ownerWallet" placeholder="0x...">
-                    <small style="color:#8b5cf6;">💜 Оплата принимается в сети <strong>Polygon</strong> (POL) · <a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;">Добавить в MetaMask</a></small>
+                    <small style="color:#8b5cf6;" id="polygonHint">💜 Оплата принимается в сети <strong>Polygon</strong> (POL) · <a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;" id="polygonLink">Добавить в MetaMask</a></small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -365,6 +366,11 @@
             footer_terms:'Соглашение', pwaInstall:'📱 Установить BRAIN T₀ как приложение',
             pwaBtn:'Установить', fileHint:'📎 Поддерживаемые форматы: ',
             attach_title:'Прикрепить файл', voice_title:'Голосовой ввод',
+            settings_title:'⚙️ Настройки',
+            apikey_hint:'Сохранится на сервер · platform.deepseek.com → API Keys',
+            saved_keys_hint:'Подключите кошелёк для управления ключами',
+            polygon_hint:'💜 Оплата принимается в сети <strong>Polygon</strong> (POL) · ',
+            polygon_link:'Добавить в MetaMask',
         },
         en: {
             crystals: 'Crystals', wallet_btn: '🦊 MetaMask',
@@ -390,6 +396,11 @@
             footer_terms:'Terms', pwaInstall:'📱 Install BRAIN T₀ as an app',
             pwaBtn:'Install', fileHint:'📎 Supported formats: ',
             attach_title:'Attach file', voice_title:'Voice input',
+            settings_title:'⚙️ Settings',
+            apikey_hint:'Saved to server · platform.deepseek.com → API Keys',
+            saved_keys_hint:'Connect wallet to manage keys',
+            polygon_hint:'💜 Payment accepted on <strong>Polygon</strong> network (POL) · ',
+            polygon_link:'Add to MetaMask',
         }
     };
 
@@ -447,6 +458,9 @@
         if (pwaBannerSpan) pwaBannerSpan.textContent = t.pwaInstall;
         const pwaBtn = document.querySelector('.pwa-install-btn');
         if (pwaBtn) pwaBtn.textContent = t.pwaBtn;
+        // Polygon hint
+        const polygonHint = document.getElementById('polygonHint');
+        if (polygonHint) polygonHint.innerHTML = t.polygon_hint + '<a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;">' + t.polygon_link + '</a>';
     }
 
     if (document.readyState === "loading") {
