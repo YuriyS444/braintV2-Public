@@ -71,7 +71,7 @@
             </div>
             
             <div class="sidebar-filters">
-                <button class="filter-btn active" onclick="setFilter('all')">Все</button>
+                <button class="filter-btn active" onclick="setFilter('all')" data-i18n="filter_all">Все</button>
                 <button class="filter-btn" onclick="setFilter('verified')">✅</button>
                 <button class="filter-btn" onclick="setFilter('quarantine')">🔬</button>
                 <button class="filter-btn" onclick="setFilter('virus')">🦠</button>
@@ -81,16 +81,16 @@
             <div class="crystal-list" id="crystalList"></div>
             
             <div class="sidebar-footer">
-                <button class="sidebar-btn" onclick="syncFromDB()">☁️ Синхр.</button>
-                <button class="sidebar-btn" onclick="exportCrystals()">📥 Экспорт</button>
-                <button class="sidebar-btn" onclick="importCrystals()">📤 Импорт</button>
+                <button class="sidebar-btn" onclick="syncFromDB()" data-i18n="sync">☁️ Синхр.</button>
+                <button class="sidebar-btn" onclick="exportCrystals()" data-i18n="export">📥 Экспорт</button>
+                <button class="sidebar-btn" onclick="importCrystals()" data-i18n="import">📤 Импорт</button>
                 <button class="sidebar-btn" onclick="clearHistory()">🗑️</button>
             </div>
             
             <div class="sidebar-stats" id="sidebarStats">
                 <div class="stat-item">
                     <span class="stat-value" id="statTotal">0</span>
-                    <span class="stat-label">всего</span>
+                    <span class="stat-label" data-i18n="stat_total">всего</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-value" id="statDiamonds">0</span>
@@ -114,18 +114,18 @@
                 <div class="welcome-message" id="welcomeMessage">
                     <div class="welcome-icon">🧠</div>
                     <h1>BRAIN T₀ v5.0</h1>
-                    <p>69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD</p>
+                    <p data-i18n="welcome_stats">69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD</p>
                     <div class="main-formula">1^(∞-1)/2ⁿ = 1</div>
                     <div class="tomes-grid">
-                        <div class="tome-item">Том 1: Аксиоматика</div>
-                        <div class="tome-item">Том 2: Математика</div>
-                        <div class="tome-item">Том 3: Физика</div>
-                        <div class="tome-item">Том 4: Химия</div>
-                        <div class="tome-item">Том 5: Биология</div>
-                        <div class="tome-item">Том 6: Психология</div>
-                        <div class="tome-item">Том 7: Философия</div>
-                        <div class="tome-item">Том 8: Синтез</div>
-                        <div class="tome-item">Том 9: Безопасность</div>
+                        <div class="tome-item" data-i18n="tome1">Том 1: Аксиоматика</div>
+                        <div class="tome-item" data-i18n="tome2">Том 2: Математика</div>
+                        <div class="tome-item" data-i18n="tome3">Том 3: Физика</div>
+                        <div class="tome-item" data-i18n="tome4">Том 4: Химия</div>
+                        <div class="tome-item" data-i18n="tome5">Том 5: Биология</div>
+                        <div class="tome-item" data-i18n="tome6">Том 6: Психология</div>
+                        <div class="tome-item" data-i18n="tome7">Том 7: Философия</div>
+                        <div class="tome-item" data-i18n="tome8">Том 8: Синтез</div>
+                        <div class="tome-item" data-i18n="tome9">Том 9: Безопасность</div>
                     </div>
                 </div>
             </div>
@@ -139,10 +139,10 @@
                 </div>
 
                 <div class="input-row">
-                    <span class="suggest-label">Рек. уровень: <span id="suggestLevel">S3</span></span>
-                    <span class="suggest-link" onclick="applySuggestedLevel()">(применить)</span>
-                    <span class="input-hint">· Enter — отправить</span>
-                    <span class="input-hint">· Shift+Enter — перенос</span>
+                    <span class="suggest-label" data-i18n-prefix="rec_level">Рек. уровень: <span id="suggestLevel">S3</span></span>
+                    <span class="suggest-link" onclick="applySuggestedLevel()" data-i18n="apply">(применить)</span>
+                    <span class="input-hint" data-i18n="hint_enter">· Enter — отправить</span>
+                    <span class="input-hint" data-i18n="hint_shift">· Shift+Enter — перенос</span>
                     <label class="stream-toggle">
                         <input type="checkbox" id="streamToggle" checked> Stream
                     </label>
@@ -150,7 +150,7 @@
                 
                 <div class="input-wrapper">
                     <!-- Кнопка прикрепления файла -->
-                    <button class="attach-btn" id="attachBtn" onclick="triggerFileUpload()" title="Прикрепить файл">📎</button>
+                    <button class="attach-btn" id="attachBtn" onclick="triggerFileUpload()" title="Прикрепить файл" data-i18n-title="attach_title">📎</button>
                     <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)">
 
                     <textarea 
@@ -162,7 +162,7 @@
                     ></textarea>
 
                     <!-- Кнопка голосового ввода -->
-                    <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="Голосовой ввод">🎤</button>
+                    <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="Голосовой ввод" data-i18n-title="voice_title">🎤</button>
 
                     <button id="sendBtn" class="send-btn" onclick="sendMessage()">➤</button>
                     <button id="stopBtn" class="stop-btn" onclick="stopGeneration()" style="display: none;">■</button>
@@ -181,11 +181,11 @@
             </div>
             <div class="modal-body">
                 <div class="settings-group">
-                    <label>🌐 Сервер API</label>
+                    <label data-i18n="label_server">🌐 Сервер API</label>
                     <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
                 </div>
                 <div class="settings-group">
-                    <label>🤖 Провайдер ключа</label>
+                    <label data-i18n="label_provider">🤖 Провайдер ключа</label>
                     <select id="keyProvider">
                         <option value="deepseek">🧠 DeepSeek</option>
                         <option value="claude">🎭 Claude</option>
@@ -194,23 +194,23 @@
                     </select>
                 </div>
                 <div class="settings-group">
-                    <label>🔑 API ключ провайдера</label>
+                    <label data-i18n="label_apikey">🔑 API ключ провайдера</label>
                     <input type="password" id="apiKey" placeholder="sk-...">
                     <small id="apiKeyHint">Сохранится на сервер · platform.deepseek.com → API Keys</small>
                 </div>
                 <div class="settings-group" id="savedKeysGroup">
-                    <label>💾 Сохранённые ключи</label>
+                    <label data-i18n="label_saved">💾 Сохранённые ключи</label>
                     <div id="savedKeysList" style="font-size:13px;color:var(--text-2-dark);">Загрузка...</div>
                 </div>    
                 <div class="settings-group">
-                    <label>💰 Кошелёк для оплаты</label>
+                    <label data-i18n="label_wallet">💰 Кошелёк для оплаты</label>
                     <input type="text" id="ownerWallet" placeholder="0x...">
                     <small style="color:#8b5cf6;">💜 Оплата принимается в сети <strong>Polygon</strong> (POL) · <a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;">Добавить в MetaMask</a></small>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeSettings()">Отмена</button>
-                <button class="btn-primary" onclick="saveSettings()">Сохранить</button>
+                <button class="btn-secondary" onclick="closeSettings()" data-i18n="btn_cancel">Отмена</button>
+                <button class="btn-primary" onclick="saveSettings()" data-i18n="btn_save">Сохранить</button>
             </div>
         </div>
     </div>
@@ -239,14 +239,14 @@
                 <button id="termsDeclineBtn" class="terms-btn terms-btn-decline" onclick="declineTerms()">Отказаться</button>
                 <button id="termsAcceptBtn" class="terms-btn terms-btn-accept" onclick="acceptTerms()" disabled>Принять</button>
             </div>
-            <div class="terms-modal-footer-note">* Отказ означает перенаправление на google.com</div>
+            <div class="terms-modal-footer-note"><span data-i18n="terms_note">* Отказ означает перенаправление на google.com</span></div>
         </div>
     </div>
     <div id="termsOverlay" class="terms-overlay" style="display: none;"></div>
 
     <!-- Футер -->
     <footer style="text-align:center; padding:12px; color:var(--text-3-dark); font-size:11px;">
-        <a href="#" onclick="showTermsModal(); return false;" style="color:var(--text-2-dark);">Соглашение</a> |
+        <a href="#" onclick="showTermsModal(); return false;" style="color:var(--text-2-dark);" data-i18n="footer_terms">Соглашение</a> |
         © 2026 Юрий Сунуров
     </footer>
 
@@ -264,13 +264,13 @@
             <div class="admin-header">
                 <h2>👑 Кабинет архитектора</h2>
                 <div class="admin-tabs">
-                    <button class="admin-tab active" onclick="showAdminTab('stats')">📊 Статистика</button>
-                    <button class="admin-tab" onclick="showAdminTab('users')">👥 Пользователи</button>
-                    <button class="admin-tab" onclick="showAdminTab('crystals')">💎 Кристаллы</button>
-                    <button class="admin-tab" onclick="showAdminTab('attacks')">🛡️ Атаки</button>
-                    <button class="admin-tab" onclick="showAdminTab('prompts')">✏️ Промпты</button>
-                    <button class="admin-tab" onclick="showAdminTab('levels')">⚙️ Уровни</button>
-                    <button class="admin-tab" onclick="showAdminTab('economy')">💰 Экономика</button>
+                    <button class="admin-tab active" onclick="showAdminTab('stats')" data-i18n="tab_stats">📊 Статистика</button>
+                    <button class="admin-tab" onclick="showAdminTab('users')" data-i18n="tab_users">👥 Пользователи</button>
+                    <button class="admin-tab" onclick="showAdminTab('crystals')" data-i18n="tab_crystals">💎 Кристаллы</button>
+                    <button class="admin-tab" onclick="showAdminTab('attacks')" data-i18n="tab_attacks">🛡️ Атаки</button>
+                    <button class="admin-tab" onclick="showAdminTab('prompts')" data-i18n="tab_prompts">✏️ Промпты</button>
+                    <button class="admin-tab" onclick="showAdminTab('levels')" data-i18n="tab_levels">⚙️ Уровни</button>
+                    <button class="admin-tab" onclick="showAdminTab('economy')" data-i18n="tab_economy">💰 Экономика</button>
                 </div>
                 <span class="admin-close" onclick="closeAdminPanel()">&times;</span>
             </div>
@@ -284,7 +284,7 @@
     <div id="profileModal" class="modal" style="display:none;">
         <div class="modal-content profile-modal-content">
             <div class="modal-header">
-                <h3>👤 Мой кабинет</h3>
+                <h3 data-i18n="profile_title">👤 Мой кабинет</h3>
                 <span class="close-btn" onclick="closeProfile()">&times;</span>
             </div>
             <div class="modal-body" id="profileBody">
@@ -342,32 +342,54 @@
     // ── Язык — автоопределение по браузеру ──
     const I18N = {
         ru: {
-            crystals: 'Кристаллы',
+            crystals: 'Кристаллы', wallet_btn: '🦊 MetaMask',
+            search_placeholder: 'Поиск кристаллов...', filter_all: 'Все',
+            sync: '☁️ Синхр.', export: '📥 Экспорт', import: '📤 Импорт', stat_total: 'всего',
+            rec_level: 'Рек. уровень:', apply: '(применить)',
+            hint_enter: '· Enter — отправить', hint_shift: '· Shift+Enter — перенос',
             placeholder: 'Задайте вопрос Brain T₀...',
-            search: 'Поиск кристаллов...',
-            agree: 'Я прочитал и согласен с условиями пользовательского соглашения',
-            decline: 'Отказаться',
-            accept: 'Принять',
-            settings: 'Настройки',
-            save: 'Сохранить',
-            cancel: 'Отмена',
-            pwaInstall: '📱 Установить BRAIN T₀ как приложение',
-            pwaBtn: 'Установить',
-            fileHint: '📎 Поддерживаемые форматы: '
+            welcome_stats: '69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD',
+            tome1:'Том 1: Аксиоматика', tome2:'Том 2: Математика', tome3:'Том 3: Физика',
+            tome4:'Том 4: Химия', tome5:'Том 5: Биология', tome6:'Том 6: Психология',
+            tome7:'Том 7: Философия', tome8:'Том 8: Синтез', tome9:'Том 9: Безопасность',
+            settings_title:'⚙️ Настройки', label_server:'🌐 Сервер API',
+            label_provider:'🤖 Провайдер ключа', label_apikey:'🔑 API ключ провайдера',
+            label_saved:'💾 Сохранённые ключи', label_wallet:'💰 Кошелёк для оплаты',
+            btn_save:'Сохранить', btn_cancel:'Отмена',
+            tab_stats:'📊 Статистика', tab_users:'👥 Пользователи', tab_crystals:'💎 Кристаллы',
+            tab_attacks:'🛡️ Атаки', tab_prompts:'✏️ Промпты', tab_levels:'⚙️ Уровни', tab_economy:'💰 Экономика',
+            profile_title:'👤 Мой кабинет',
+            agree:'Я прочитал и согласен с условиями пользовательского соглашения',
+            decline:'Отказаться', accept:'Принять',
+            terms_note:'* Отказ означает перенаправление на google.com',
+            footer_terms:'Соглашение', pwaInstall:'📱 Установить BRAIN T₀ как приложение',
+            pwaBtn:'Установить', fileHint:'📎 Поддерживаемые форматы: ',
+            attach_title:'Прикрепить файл', voice_title:'Голосовой ввод',
         },
         en: {
-            crystals: 'Crystals',
+            crystals: 'Crystals', wallet_btn: '🦊 MetaMask',
+            search_placeholder: 'Search crystals...', filter_all: 'All',
+            sync: '☁️ Sync', export: '📥 Export', import: '📤 Import', stat_total: 'total',
+            rec_level: 'Rec. level:', apply: '(apply)',
+            hint_enter: '· Enter — send', hint_shift: '· Shift+Enter — newline',
             placeholder: 'Ask Brain T₀ a question...',
-            search: 'Search crystals...',
-            agree: 'I have read and agree to the terms of service',
-            decline: 'Decline',
-            accept: 'Accept',
-            settings: 'Settings',
-            save: 'Save',
-            cancel: 'Cancel',
-            pwaInstall: '📱 Install BRAIN T₀ as an app',
-            pwaBtn: 'Install',
-            fileHint: '📎 Supported formats: '
+            welcome_stats: '69 crystals · 9 volumes · PostgreSQL · Redis · 2FA · CI/CD',
+            tome1:'Vol 1: Axiomatics', tome2:'Vol 2: Mathematics', tome3:'Vol 3: Physics',
+            tome4:'Vol 4: Chemistry', tome5:'Vol 5: Biology', tome6:'Vol 6: Psychology',
+            tome7:'Vol 7: Philosophy', tome8:'Vol 8: Synthesis', tome9:'Vol 9: Security',
+            settings_title:'⚙️ Settings', label_server:'🌐 API Server',
+            label_provider:'🤖 Key Provider', label_apikey:'🔑 Provider API Key',
+            label_saved:'💾 Saved Keys', label_wallet:'💰 Payment Wallet',
+            btn_save:'Save', btn_cancel:'Cancel',
+            tab_stats:'📊 Statistics', tab_users:'👥 Users', tab_crystals:'💎 Crystals',
+            tab_attacks:'🛡️ Attacks', tab_prompts:'✏️ Prompts', tab_levels:'⚙️ Levels', tab_economy:'💰 Economy',
+            profile_title:'👤 My Cabinet',
+            agree:'I have read and agree to the terms of service',
+            decline:'Decline', accept:'Accept',
+            terms_note:'* Declining will redirect to google.com',
+            footer_terms:'Terms', pwaInstall:'📱 Install BRAIN T₀ as an app',
+            pwaBtn:'Install', fileHint:'📎 Supported formats: ',
+            attach_title:'Attach file', voice_title:'Voice input',
         }
     };
 
@@ -379,44 +401,59 @@
         auto:     'PDF, TXT, images'
     };
 
-    // Автоопределение языка по браузеру
     const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
     const currentLang = browserLang;
 
     function applyLang() {
         const t = I18N[currentLang];
-        // html lang
         document.documentElement.lang = currentLang;
-        // placeholder
+        // Все элементы с data-i18n
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (t[key] !== undefined) el.textContent = t[key];
+        });
+        // Элементы с data-i18n-title
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            if (t[key] !== undefined) el.title = t[key];
+        });
+        // Специальные — placeholder textarea
         const input = document.getElementById('userInput');
         if (input) input.placeholder = t.placeholder;
-        // кристаллы
-        document.querySelectorAll('[data-i18n="crystals"]').forEach(el => el.textContent = t.crystals);
-        // поиск
         const search = document.getElementById('searchInput');
-        if (search) search.placeholder = t.search;
-        // соглашение checkbox
-        const agreeSpan = document.querySelector('.terms-checkbox span');
-        if (agreeSpan) agreeSpan.textContent = t.agree;
-        // кнопки соглашения
+        if (search) search.placeholder = t.search_placeholder;
+        // suggest-label имеет вложенный span — меняем только текст до span
+        const suggestLabel = document.querySelector('.suggest-label');
+        if (suggestLabel) {
+            const span = suggestLabel.querySelector('#suggestLevel');
+            if (span) {
+                suggestLabel.childNodes[0].textContent = t.rec_level + ' ';
+            }
+        }
+        // Кнопки соглашения
         const declineBtn = document.getElementById('termsDeclineBtn');
         if (declineBtn) declineBtn.textContent = t.decline;
         const acceptBtn = document.getElementById('termsAcceptBtn');
-        if (acceptBtn) acceptBtn.textContent = t.accept;
+        if (acceptBtn) {
+            const wasDisabled = acceptBtn.disabled;
+            acceptBtn.textContent = t.accept;
+            acceptBtn.disabled = wasDisabled;
+        }
+        // Checkbox span
+        const agreeSpan = document.querySelector('.terms-checkbox label span');
+        if (agreeSpan) agreeSpan.textContent = t.agree;
         // PWA banner
-        const pwaBanner = document.querySelector('.pwa-install-banner span');
-        if (pwaBanner) pwaBanner.textContent = t.pwaInstall;
+        const pwaBannerSpan = document.querySelector('.pwa-install-banner > span');
+        if (pwaBannerSpan) pwaBannerSpan.textContent = t.pwaInstall;
         const pwaBtn = document.querySelector('.pwa-install-btn');
         if (pwaBtn) pwaBtn.textContent = t.pwaBtn;
     }
 
-    // Применяем язык после полной загрузки DOM
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", applyLang);
     } else {
         applyLang();
     }
-    // Повторно применяем после загрузки client.js
     window.addEventListener("load", applyLang);
 
     // ── Голосовой ввод ──
