@@ -1587,6 +1587,22 @@ async function loadAdminAttacks() {
 
         <div style="margin-top:12px">
             <button class="admin-btn-sm" onclick="adminBlockIp()">➕ Заблокировать IP вручную</button>
+        </div>
+
+        <div class="admin-section-title" style="margin-top:20px">🛡️ Режим фильтрации запросов</div>
+        <div class="admin-card" style="margin-top:8px" id="filterModeCard">
+            <div class="admin-card-title">Текущий режим</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="filterModeBtns">
+                <button class="admin-btn-sm ok" onclick="adminSetFilterMode('open')">🟢 Открытый</button>
+                <button class="admin-btn-sm warn" onclick="adminSetFilterMode('science')">🔬 Научный</button>
+                <button class="admin-btn-sm danger" onclick="adminSetFilterMode('strict')">🔴 Строгий</button>
+            </div>
+            <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:10px;line-height:1.6">
+                🟢 <b>Открытый</b> — все запросы проходят без фильтрации<br>
+                🔬 <b>Научный</b> — чувствительные темы → научный ответ<br>
+                🔴 <b>Строгий</b> — блокировка подозрительных запросов
+            </div>
+            <div id="filterModeStatus" style="margin-top:10px;font-size:12px;color:#fbbf24"></div>
         </div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
@@ -1972,6 +1988,30 @@ async function loadProfile() {
     } catch(e) {
         body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px">❌ ${e.message}</div>`;
     }
+}
+
+
+// ─── РЕЖИМ ФИЛЬТРАЦИИ ────────────────────────────────────────
+async function adminSetFilterMode(mode) {
+    const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+    if (!confirm(`Установить режим фильтрации: ${labels[mode]}?`)) return;
+    try {
+        await adminFetch('/api/admin/filter-mode', { method: 'POST', body: { mode } });
+        const status = document.getElementById('filterModeStatus');
+        if (status) status.textContent = `✅ Режим установлен: ${labels[mode]}`;
+        showNotification(`✅ Режим фильтрации: ${labels[mode]}`, 'success');
+    } catch(e) {
+        showNotification('❌ Ошибка: ' + e.message, 'error');
+    }
+}
+
+async function loadFilterMode() {
+    try {
+        const d = await adminFetch('/api/admin/filter-mode');
+        const status = document.getElementById('filterModeStatus');
+        const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+        if (status) status.textContent = `Текущий режим: ${labels[d.mode] || d.mode}`;
+    } catch {}
 }
 
 function copyToClipboard(text) {
