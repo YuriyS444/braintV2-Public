@@ -11,7 +11,7 @@ let wallet = null;
 let token = sessionStorage.getItem('brain_token');
 let isArchitect = false;
 let crystals = [];
-let history = [];
+let history = JSON.parse(sessionStorage.getItem('brain_history') || '[]');
 let currentFilter = 'all';
 let currentSearch = '';
 let abortController = null;
@@ -483,6 +483,7 @@ async function sendNormalMessage(question, level, txHash) {
     
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
+    sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
 }
 
 async function sendStreamMessage(question, level, txHash) {
@@ -553,6 +554,7 @@ async function sendStreamMessage(question, level, txHash) {
                         finalizeAssistantMessage(messageId, data.crystal);
                         history.push({ role: 'user', content: question });
                         history.push({ role: 'assistant', content: answer });
+                        sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
                     }
                     
                     if (data.error) {
@@ -592,6 +594,21 @@ async function processPayment(level, price) {
     if (!confirmed) return null;
 
     try {
+        // Переключаемся на Polygon перед оплатой
+        try {
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x89' }] // Polygon Mainnet
+            });
+        } catch (switchError) {
+            if (switchError.code === 4902) {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+                });
+            }
+        }
+
         const wei = '0x' + Math.floor(price * 1e18).toString(16);
 
         const txHash = await window.ethereum.request({
@@ -814,9 +831,22 @@ function escapeHtml(text) {
 function formatMessage(text) {
     if (!text) return '';
     text = escapeHtml(text);
-    // Markdown-lite: **bold**, `code`, переносы строк
+    // Заголовки
+    text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // Bold и italic
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Code
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Списки
+    text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
+    text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+    text = text.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
+    text = text.replace(/(<oli>.*<\/oli>)/gs, '<ol>$1</ol>');
+    text = text.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
+    // Переносы строк (не внутри тегов)
     text = text.replace(/\n/g, '<br>');
     return text;
 }
@@ -908,7 +938,7 @@ async function loadLevelOptions() {
             } else {
                 label += ` $${price}`;
             }
-            return `<option value="${lvl}" ${lvl === 'S3' ? 'selected' : ''}>${label}</option>`;
+            return `<option value="${lvl}" ${lvl === 'S0' ? 'selected' : ''}>${label}</option>`;
         }).join('');
     } catch { /* оставляем статичные опции из HTML */ }
 }
@@ -1060,7 +1090,7 @@ async function saveSettings() {
 async function loadSavedKeys() {
     const container = document.getElementById('savedKeysList');
     if (!container || !token) {
-        if (container) container.textContent = navigator.language?.startsWith('ru') ? 'Подключите кошелёк для управления ключами' : 'Connect wallet to manage keys';
+        if (container) container.textContent = 'Подключите кошелёк для управления ключами';
         return;
     }
     try {
@@ -1141,6 +1171,7 @@ function clearHistory() {
         messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀ v5.0</h1></div>';
     }
     history.length = 0;
+    sessionStorage.removeItem('brain_history');
     showNotification('🗑️ История очищена', 'info');
 }
 
@@ -1668,7 +1699,7 @@ async function loadAdminEconomy() {
             <tr>
                 <td>${p.id}</td>
                 <td title="${p.wallet}">${p.wallet?.slice(0,8)}...</td>
-                <td><a href="https://etherscan.io/tx/${p.tx_hash}" target="_blank" style="color:var(--accent)">${p.tx_hash?.slice(0,10)}...</a></td>
+                <td><a href="https://polygonscan.com/tx/${p.tx_hash}" target="_blank" style="color:var(--accent)">${p.tx_hash?.slice(0,10)}...</a></td>
                 <td>$${p.amount}</td>
                 <td>${p.level}</td>
                 <td><span class="status-badge ${p.status}">${p.status}</span></td>
@@ -1853,7 +1884,7 @@ async function loadProfile() {
                 <span class="level-badge level-${p.level}">${p.level}</span>
                 <span class="profile-payment-amount">$${p.amount}</span>
                 <span class="profile-payment-date">${new Date(p.created_at).toLocaleDateString()}</span>
-                <a href="https://etherscan.io/tx/${p.tx_hash}" target="_blank" class="profile-tx-link" title="${p.tx_hash}">
+                <a href="https://polygonscan.com/tx/${p.tx_hash}" target="_blank" class="profile-tx-link" title="${p.tx_hash}">
                     🔗 TX
                 </a>
             </div>`).join('')
