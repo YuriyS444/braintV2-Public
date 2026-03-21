@@ -551,6 +551,8 @@ async function sendStreamMessage(question, level, txHash) {
                         }
                         
                         finalizeAssistantMessage(messageId, data.crystal);
+                        history.push({ role: 'user', content: question });
+                        history.push({ role: 'assistant', content: answer });
                     }
                     
                     if (data.error) {
