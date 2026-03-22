@@ -902,9 +902,55 @@ function copyMessage(messageId) {
 }
 
 function showCrystal(crystalId) {
-    const crystal = crystals.find(c => c.id === crystalId);
+    const crystal = crystals.find(c => String(c.id) === String(crystalId));
     if (!crystal) return;
-    showNotification(`💎 ${crystal.question?.slice(0, 60) || 'Кристалл'}`, 'info');
+
+    // Показываем кристалл в чате
+    removeWelcomeMessage();
+
+    // Добавляем вопрос
+    const userDiv = document.createElement('div');
+    userDiv.className = 'message user';
+    userDiv.innerHTML = `
+        <div class="message-avatar">👤</div>
+        <div class="message-content">
+            <div class="message-bubble">${escapeHtml(crystal.question || '')}</div>
+        </div>
+    `;
+    elements.messages.appendChild(userDiv);
+
+    // Добавляем ответ
+    const msgId = 'crystal_' + crystalId + '_' + Date.now();
+    const assistantDiv = document.createElement('div');
+    assistantDiv.className = 'message assistant';
+    assistantDiv.id = msgId;
+    assistantDiv.innerHTML = `
+        <div class="message-avatar">🧠</div>
+        <div class="message-content">
+            <div class="message-bubble">${formatMessage(crystal.answer || '')}</div>
+            <div class="message-meta">
+                <span class="message-level">${crystal.level || 'S0'}</span>
+                <span class="message-status ${crystal.status || ''}">
+                    ${crystal.status === 'verified' ? '✅' :
+                      crystal.status === 'quarantine' ? '🔬' :
+                      crystal.status === 'virus' ? '🦠' : '⚠️'}
+                </span>
+                <span style="font-size:10px;opacity:.5">💎 из истории</span>
+            </div>
+            <div class="message-actions">
+                <button class="message-action" onclick="copyMessage('${msgId}')">📋</button>
+                <button class="message-action" onclick="elements.userInput.value=${JSON.stringify(crystal.question || '')}; autoResize(elements.userInput);" title="Задать снова">↺</button>
+            </div>
+        </div>
+    `;
+    elements.messages.appendChild(assistantDiv);
+    scrollToBottom();
+
+    // Закрываем sidebar на мобиле
+    if (window.innerWidth <= 768) {
+        document.getElementById('sidebar')?.classList.remove('show');
+        document.getElementById('sidebarOverlay')?.classList.remove('show');
+    }
 }
 
 function applyLevel(level) {
