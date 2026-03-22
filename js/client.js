@@ -96,7 +96,7 @@ function debounce(func, wait) {
 
 async function connectWallet() {
     if (!window.ethereum) {
-        showNotification('Установите MetaMask', 'error');
+        showNotification(currentLang === 'ru' ? 'Установите MetaMask' : 'Install MetaMask', 'error');
         return;
     }
     
@@ -127,7 +127,7 @@ async function connectWallet() {
         }
         
     } catch (error) {
-        showNotification('Ошибка подключения: ' + error.message, 'error');
+        showNotification((currentLang === 'ru' ? 'Ошибка подключения: ' : 'Connection error: ') + error.message, 'error');
     }
 }
 
@@ -162,7 +162,7 @@ async function login() {
         
         if (isArchitect) {
             elements.architectBadge.style.display = 'inline-block';
-            showNotification('👑 Режим архитектора активирован', 'success');
+            showNotification(currentLang === 'ru' ? '👑 Режим архитектора активирован' : '👑 Architect mode activated', 'success');
         }
         
         await loadCrystals();
@@ -293,13 +293,13 @@ function handleSearch() {
 
 async function syncFromDB() {
     if (!token || !wallet) {
-        showNotification('Подключите кошелёк', 'warning');
+        showNotification(currentLang === 'ru' ? 'Подключите кошелёк' : 'Connect wallet', 'warning');
         return;
     }
     
-    showNotification('Синхронизация...', 'info');
+    showNotification(currentLang === 'ru' ? 'Синхронизация...' : 'Syncing...', 'info');
     await loadCrystals();
-    showNotification('✅ Синхронизировано', 'success');
+    showNotification(currentLang === 'ru' ? '✅ Синхронизировано' : '✅ Synced', 'success');
 }
 
 function exportCrystals() {
@@ -341,7 +341,7 @@ function importCrystals() {
             await loadCrystals();
             
         } catch (error) {
-            showNotification('❌ Ошибка импорта', 'error');
+            showNotification(currentLang === 'ru' ? '❌ Ошибка импорта' : '❌ Import error', 'error');
         }
     };
     
@@ -455,7 +455,7 @@ async function sendNormalMessage(question, level, txHash) {
         // Лимит исчерпан
         if (response.status === 429) {
             const msg = error.limit
-                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.`
+                ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/day.\nResets at midnight UTC.`)
                 : error.error;
             throw new Error(msg);
         }
@@ -897,8 +897,8 @@ function copyMessage(messageId) {
     if (!msg) return;
     const text = msg.querySelector('.message-bubble')?.textContent || '';
     navigator.clipboard.writeText(text)
-        .then(() => showNotification('✅ Скопировано', 'success'))
-        .catch(() => showNotification('❌ Ошибка копирования', 'error'));
+        .then(() => showNotification(currentLang === 'ru' ? '✅ Скопировано' : '✅ Copied', 'success'))
+        .catch(() => showNotification(currentLang === 'ru' ? '❌ Ошибка копирования' : '❌ Copy error', 'error'));
 }
 
 function showCrystal(crystalId) {
@@ -934,7 +934,7 @@ async function loadLevelOptions() {
             const limit = cfg.daily_limit || 0;
             let label = lvl;
             if (price === 0) {
-                label += limit > 0 ? ` Free (${limit}/день)` : ' Free';
+                label += limit > 0 ? ` Free (${limit}/${currentLang === 'ru' ? 'день' : 'day'})` : ' Free';
             } else {
                 label += ` $${price}`;
             }
@@ -1305,7 +1305,7 @@ init = async function() {
 // ============================================================
 
 function openAdminPanel() {
-    if (!token) return showNotification('Необходима авторизация через MetaMask', 'warning');
+    if (!token) return showNotification(currentLang === 'ru' ? 'Необходима авторизация через MetaMask' : 'MetaMask authorization required', 'warning');
     document.getElementById('adminPanel').style.display = 'flex';
     showAdminTab('stats');
 }
@@ -1853,7 +1853,7 @@ function updateLevelSelect(level, price) {
 
 async function openProfile() {
     if (!token) {
-        showNotification('Подключите MetaMask для входа', 'info');
+        showNotification(currentLang === 'ru' ? 'Подключите MetaMask для входа' : 'Connect MetaMask to sign in', 'info');
         await connectWallet();
         return;
     }
@@ -2015,5 +2015,5 @@ async function loadFilterMode() {
 }
 
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => showNotification('📋 Скопировано', 'success'));
+    navigator.clipboard.writeText(text).then(() => showNotification(currentLang === 'ru' ? '📋 Скопировано' : '📋 Copied', 'success'));
 }
