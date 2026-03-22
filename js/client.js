@@ -1604,6 +1604,7 @@ async function loadAdminAttacks() {
             </div>
             <div id="filterModeStatus" style="margin-top:10px;font-size:12px;color:#fbbf24"></div>
         </div>`;
+        loadFilterMode();
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1998,8 +1999,9 @@ async function adminSetFilterMode(mode) {
     try {
         await adminFetch('/api/admin/filter-mode', { method: 'POST', body: { mode } });
         const status = document.getElementById('filterModeStatus');
-        if (status) status.textContent = `✅ Режим установлен: ${labels[mode]}`;
+        if (status) status.textContent = `✅ Активный режим: ${labels[mode]}`;
         showNotification(`✅ Режим фильтрации: ${labels[mode]}`, 'success');
+        highlightFilterMode(mode);
     } catch(e) {
         showNotification('❌ Ошибка: ' + e.message, 'error');
     }
@@ -2010,8 +2012,18 @@ async function loadFilterMode() {
         const d = await adminFetch('/api/admin/filter-mode');
         const status = document.getElementById('filterModeStatus');
         const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
-        if (status) status.textContent = `Текущий режим: ${labels[d.mode] || d.mode}`;
+        if (status) status.textContent = `Активный режим: ${labels[d.mode] || d.mode}`;
+        highlightFilterMode(d.mode);
     } catch {}
+}
+
+function highlightFilterMode(mode) {
+    const btns = document.querySelectorAll('#filterModeBtns .admin-btn-sm');
+    const modes = ['open', 'science', 'strict'];
+    btns.forEach((btn, i) => {
+        btn.style.opacity = modes[i] === mode ? '1' : '0.4';
+        btn.style.fontWeight = modes[i] === mode ? 'bold' : 'normal';
+    });
 }
 
 function copyToClipboard(text) {
