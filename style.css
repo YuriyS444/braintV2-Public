@@ -15,29 +15,6 @@
     --gold: #ffd700;
 }
 
-
-[data-theme="light"] {
-    --admin-bg: #ffffff;
-    --admin-header-bg: linear-gradient(135deg, #f0f0f5, #e8e8f0);
-    --admin-text: #111118;
-    --admin-text-2: #333344;
-    --admin-text-3: #444455;
-    --admin-text-4: #666677;
-    --admin-text-5: #888899;
-    --admin-text-6: #aaaabc;
-    --admin-text-8: #222233;
-    --admin-card-bg: rgba(0,0,0,.04);
-    --admin-th-bg: rgba(0,0,0,.06);
-    --admin-input-bg: rgba(0,0,0,.04);
-    --admin-row-bg: rgba(0,0,0,.02);
-    --admin-btn-bg: rgba(0,0,0,.08);
-    --admin-textarea-bg: rgba(0,0,0,.04);
-    --admin-border: rgba(0,0,0,.1);
-    --admin-border-2: rgba(0,0,0,.15);
-    --admin-border-3: rgba(0,0,0,.08);
-    --admin-border-4: rgba(0,0,0,.05);
-}
-
 [data-theme="light"] {
     --bg-dark: #f5f5f8;
     --surface-dark: #ffffff;
@@ -1014,13 +991,11 @@ header {
 .admin-content {
     position: relative; z-index: 1;
     width: 100%; max-width: 1100px; max-height: 90vh;
-    background: #1a1a2e;
+    background: var(--bg-card, #1a1a2e);
     border: 1px solid rgba(255,215,0,.3);
     border-radius: 16px; overflow: hidden;
     display: flex; flex-direction: column;
     box-shadow: 0 20px 60px rgba(0,0,0,.5);
-    color: rgba(255,255,255,.85);
-    color-scheme: dark;
 }
 
 .admin-header {
@@ -1046,7 +1021,7 @@ header {
     font-size: 24px; cursor: pointer; color: rgba(255,255,255,.5);
     line-height: 1; padding: 4px; margin-left: auto;
 }
-.admin-close:hover { color: rgba(255,255,255,.9); }
+.admin-close:hover { color: #fff; }
 
 .admin-body {
     flex: 1; overflow-y: auto; padding: 16px;
@@ -1135,13 +1110,13 @@ header {
 /* Инпуты */
 .admin-input {
     padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15);
-    background: var(--admin-input-bg, rgba(255,255,255,.07)); color: #fff; font-size: 12px;
+    background: rgba(255,255,255,.07); color: #fff; font-size: 12px;
     outline: none; flex: 1; min-width: 0;
 }
 .admin-input:focus { border-color: rgba(255,215,0,.4); }
 .admin-input-sm {
     padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.1);
-    background: var(--admin-input-bg, rgba(255,255,255,.07)); color: #fff; font-size: 11px;
+    background: rgba(255,255,255,.07); color: #fff; font-size: 11px;
 }
 
 /* Промпты */
@@ -1157,7 +1132,7 @@ header {
 .admin-textarea {
     width: 100%; min-height: 80px; padding: 8px; margin-bottom: 8px;
     background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1);
-    border-radius: 8px; color: rgba(255,255,255,.9); font-size: 12px; resize: vertical;
+    border-radius: 8px; color: #fff; font-size: 12px; resize: vertical;
     font-family: inherit; box-sizing: border-box;
 }
 
@@ -1229,17 +1204,17 @@ header {
 }
 
 .profile-card {
-    background: var(--surface-2-dark);
-    border: 1px solid var(--border-dark);
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1);
     border-radius: 12px; padding: 16px;
 }
 .profile-card-wide { grid-column: 1 / -1; }
 .profile-card-title {
     font-size: 13px; font-weight: 600;
-    color: var(--text-dark);
+    color: rgba(255,255,255,.8);
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-dark);
+    border-bottom: 1px solid rgba(255,255,255,.08);
 }
 
 /* Профиль */
@@ -1249,23 +1224,23 @@ header {
 }
 .profile-avatar { font-size: 28px; }
 .profile-wallet-addr {
-    font-size: 13px; font-weight: 600; color: var(--text-dark);
+    font-size: 13px; font-weight: 600; color: #fff;
     font-family: monospace;
 }
-.profile-role { font-size: 11px; color: var(--text-2-dark); margin-top: 2px; }
+.profile-role { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 2px; }
 .profile-copy-btn {
     margin-left: auto; background: none; border: none;
-    cursor: pointer; font-size: 16px; opacity: .7; color: var(--text-2-dark);
+    cursor: pointer; font-size: 16px; opacity: .5;
     transition: opacity .2s;
 }
 .profile-copy-btn:hover { opacity: 1; }
 
 .profile-stat-row {
     display: flex; justify-content: space-between;
-    font-size: 12px; color: var(--text-2-dark);
-    padding: 5px 0; border-bottom: 1px solid var(--border-dark);
+    font-size: 12px; color: rgba(255,255,255,.6);
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05);
 }
-.profile-stat-row b { color: var(--text-dark); }
+.profile-stat-row b { color: #fff; }
 .profile-stat-row.highlight b { color: #fbbf24; font-size: 14px; }
 
 /* Кристаллы */
@@ -1274,15 +1249,15 @@ header {
     gap: 8px;
 }
 .profile-crystal-stat {
-    background: var(--surface-dark);
+    background: rgba(255,255,255,.04);
     border-radius: 8px; padding: 10px;
     text-align: center;
 }
 .profile-crystal-num {
-    display: block; font-size: 22px; font-weight: 700; color: var(--text-dark);
+    display: block; font-size: 22px; font-weight: 700; color: #fff;
 }
 .profile-crystal-label {
-    display: block; font-size: 11px; color: var(--text-2-dark);
+    display: block; font-size: 11px; color: rgba(255,255,255,.4);
     margin-top: 2px;
 }
 .profile-crystal-stat.diamonds .profile-crystal-num { color: #a78bfa; }
@@ -1298,24 +1273,24 @@ header {
 }
 .profile-limit-bar {
     flex: 1; height: 6px;
-    background: var(--border-dark);
+    background: rgba(255,255,255,.1);
     border-radius: 3px; overflow: hidden;
 }
 .profile-limit-fill { height: 100%; border-radius: 3px; transition: width .3s; }
-.profile-limit-text { font-size: 11px; color: var(--text-2-dark); width: 50px; text-align: right; }
-.profile-reset-hint { font-size: 11px; color: var(--text-2-dark); margin-top: 10px; }
-.profile-empty { font-size: 12px; color: var(--text-2-dark); padding: 8px 0; }
+.profile-limit-text { font-size: 11px; color: rgba(255,255,255,.5); width: 50px; text-align: right; }
+.profile-reset-hint { font-size: 11px; color: rgba(255,255,255,.3); margin-top: 10px; }
+.profile-empty { font-size: 12px; color: rgba(255,255,255,.3); padding: 8px 0; }
 
 /* Платежи */
 .profile-payments { display: flex; flex-direction: column; gap: 6px; }
 .profile-payment-row {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 8px; border-radius: 6px;
-    background: var(--surface-2-dark);
+    background: rgba(255,255,255,.03);
     font-size: 12px;
 }
 .profile-payment-amount { font-weight: 600; color: #fbbf24; margin-left: auto; }
-.profile-payment-date { color: var(--text-2-dark); font-size: 11px; }
+.profile-payment-date { color: rgba(255,255,255,.4); font-size: 11px; }
 .profile-tx-link {
     color: rgba(255,255,255,.4); text-decoration: none; font-size: 11px;
 }
