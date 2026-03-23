@@ -587,7 +587,8 @@ async function processPayment(level, price) {
 
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
-        `Сумма: $${price} (в ETH по текущему курсу)\n` +
+        `Сумма: $${price} USD (в POL по текущему курсу)\n` +
+        `Сеть: Polygon (MATIC)\n` +
         `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
         `После оплаты ответ будет получен автоматически.\nПродолжить?`
     );
