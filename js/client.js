@@ -199,8 +199,8 @@ async function loadCrystals(page = 1) {
         });
         
         if (currentFilter !== 'all') {
-            if (currentFilter === 'diamond') {
-                params.append('emoji', '💎');
+            if (currentFilter === 'crystal') {
+                params.append('is_crystal', 'true');
             } else {
                 params.append('status', currentFilter);
             }
@@ -247,13 +247,14 @@ function renderCrystals() {
     
     elements.crystalList.innerHTML = filtered.map(c => `
         <div class="crystal-item ${c.status || ''}" onclick="showCrystal('${c.id}')">
-            <span class="crystal-emoji">${c.emoji || '💨'}</span>
+            <span class="crystal-emoji">${c.is_crystal ? '💎' : (c.emoji || '💨')}</span>
             <div class="crystal-question">${escapeHtml(c.question || '')}</div>
             <div class="crystal-answer">${escapeHtml((c.answer || '').slice(0, 60))}…</div>
             <div class="crystal-status ${c.status || ''}">
                 ${c.status === 'verified' ? '✅' : 
                   c.status === 'quarantine' ? '🔬' : 
                   c.status === 'virus' ? '🦠' : '⚠️'} · ${c.level || 'S0'}
+                ${c.is_crystal ? ' · 💎' : ''}
             </div>
         </div>
     `).join('');
@@ -265,7 +266,7 @@ function updateStats() {
     if (!elements.statTotal) return;
     
     const total = crystals.length;
-    const diamonds = crystals.filter(c => c.emoji === '💎').length;
+    const diamonds = crystals.filter(c => c.is_crystal).length;
     const verified = crystals.filter(c => c.status === 'verified').length;
     const virus = crystals.filter(c => c.status === 'virus').length;
     
@@ -438,7 +439,8 @@ async function sendNormalMessage(question, level, txHash) {
         signal: abortController.signal,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone
         },
         body: JSON.stringify({
             question,
@@ -492,7 +494,8 @@ async function sendStreamMessage(question, level, txHash) {
         signal: abortController.signal,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone
         },
         body: JSON.stringify({
             question,
@@ -1419,7 +1422,7 @@ async function loadAdminStats() {
                 <div class="admin-card-title">💎 Кристаллы</div>
                 <div class="admin-stat-row"><span>Всего</span><b>${d.crystals.total}</b></div>
                 <div class="admin-stat-row"><span>Новых сегодня</span><b>${d.crystals.new_today}</b></div>
-                <div class="admin-stat-row"><span>💎 Алмазы</span><b>${d.crystals.diamonds}</b></div>
+                <div class="admin-stat-row"><span>💎 Кристаллы</span><b>${d.crystals.diamonds}</b></div>
                 <div class="admin-stat-row ok"><span>✅ Verified</span><b>${d.crystals.verified}</b></div>
                 <div class="admin-stat-row warn"><span>🔬 Quarantine</span><b>${d.crystals.quarantine}</b></div>
                 <div class="admin-stat-row danger"><span>🦠 Virus</span><b>${d.crystals.virus}</b></div>
@@ -1997,7 +2000,7 @@ async function loadProfile() {
                     </div>
                     <div class="profile-crystal-stat diamonds">
                         <span class="profile-crystal-num">${c.diamonds}</span>
-                        <span class="profile-crystal-label">💎</span>
+                        <span class="profile-crystal-label">💎 кристалл</span>
                     </div>
                     <div class="profile-crystal-stat verified">
                         <span class="profile-crystal-num">${c.verified}</span>
