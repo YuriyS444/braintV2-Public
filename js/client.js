@@ -1,8 +1,13 @@
+// ============================================================
+// client.js — BRAIN T₀ v5.1 (с исправлением оплаты)
+// OWNER_WALLET загружается с сервера, а не из localStorage
+// ============================================================
+
 const CONFIG = {
     API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
     ARCHITECT_KEY: sessionStorage.getItem('brain_architect_key') || '',
-    OWNER_WALLET: localStorage.getItem('brain_owner_wallet') || '',
+    OWNER_WALLET: '',  // ← теперь загружается с сервера
     PROVIDER: localStorage.getItem('brain_provider') || 'deepseek',
     THEME: localStorage.getItem('brain_theme') || 'dark'
 };
@@ -41,9 +46,29 @@ const elements = {
     progressBar: document.querySelector('.progress-bar')
 };
 
+// ============================================================
+// ЗАГРУЗКА OWNER_WALLET С СЕРВЕРА (исправление оплаты)
+// ============================================================
+async function loadOwnerWallet() {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/payments/owner`);
+        if (!res.ok) throw new Error('Failed to load owner wallet');
+        const data = await res.json();
+        CONFIG.OWNER_WALLET = data.wallet;
+        console.log('✅ Owner wallet loaded:', CONFIG.OWNER_WALLET?.slice(0, 10) + '...');
+    } catch (error) {
+        console.error('Failed to load owner wallet:', error);
+        // fallback на сохранённый в localStorage (если есть)
+        const savedWallet = localStorage.getItem('brain_owner_wallet');
+        if (savedWallet) {
+            CONFIG.OWNER_WALLET = savedWallet;
+            console.warn('⚠️ Using fallback wallet from localStorage');
+        }
+    }
+}
 
 // ============================================================
-// Индикатор угроз — показывает уровень атак из attack_logs
+// Индикатор угроз
 // ============================================================
 async function updateThreatIndicator() {
     const el = elements.threatIndicator;
@@ -67,11 +92,14 @@ async function updateThreatIndicator() {
         const info = map[level] || map.low;
         el.textContent = info.icon;
         el.title = info.title;
-    } catch { /* silent — не мешаем UI */ }
+    } catch { /* silent */ }
 }
 
 async function init() {
     document.documentElement.setAttribute('data-theme', CONFIG.THEME);
+    
+    // Загружаем кошелёк получателя ДО всего
+    await loadOwnerWallet();
     
     if (token) {
         await verifyToken();
@@ -382,19 +410,22 @@ async function sendMessage() {
     
     try {
         let txHash = null;
-        // Получаем актуальный конфиг уровней из API (цены управляются архитектором)
         let levelConfig = {};
         try {
             const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
             const cfgData = await cfgRes.json();
             levelConfig = cfgData.levels || {};
-        } catch { /* fallback — используем дефолтные цены */ }
+        } catch { /* fallback */ }
 
         const cfg = levelConfig[level] || {};
         const price = parseFloat(cfg.price || 0);
 
-        // Платим только если цена > 0 и пользователь не архитектор
         if (price > 0 && !isArchitect) {
+            // Проверяем, что кошелёк получателя загружен
+            if (!CONFIG.OWNER_WALLET) {
+                showNotification('❌ Кошелёк получателя не загружен. Обновите страницу.', 'error');
+                throw new Error('Owner wallet not loaded');
+            }
             txHash = await processPayment(level, price);
             if (!txHash) {
                 removeTypingIndicator();
@@ -454,7 +485,6 @@ async function sendNormalMessage(question, level, txHash) {
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
 
-        // Лимит исчерпан
         if (response.status === 429) {
             const msg = error.limit
                 ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/day.\nResets at midnight UTC.`)
@@ -462,7 +492,6 @@ async function sendNormalMessage(question, level, txHash) {
             throw new Error(msg);
         }
 
-        // Требуется оплата (не должно случаться т.к. мы уже платим, но на всякий случай)
         if (response.status === 402) {
             throw new Error(`Требуется оплата: $${error.price} для уровня ${error.level}`);
         }
@@ -580,6 +609,9 @@ function stopGeneration() {
     }
 }
 
+// ============================================================
+// ИСПРАВЛЕННАЯ ФУНКЦИЯ ОПЛАТЫ (использует CONFIG.OWNER_WALLET с сервера)
+// ============================================================
 async function processPayment(level, price) {
     if (!price || price <= 0) return null;
 
@@ -588,11 +620,17 @@ async function processPayment(level, price) {
         if (!wallet) return null;
     }
 
+    // Защита от отправки самому себе
+    if (CONFIG.OWNER_WALLET && CONFIG.OWNER_WALLET.toLowerCase() === wallet.toLowerCase()) {
+        showNotification('❌ Ошибка: кошелёк получателя совпадает с вашим', 'error');
+        return null;
+    }
+
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
         `Сумма: ${price} USDC\n` +
         `Токен: USDC (Polygon)\n` +
-        `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
+        `Получатель: ${CONFIG.OWNER_WALLET?.slice(0, 10)}...${CONFIG.OWNER_WALLET?.slice(-6)}\n\n` +
         `После оплаты ответ будет получен автоматически.\nПродолжить?`
     );
     if (!confirmed) return null;
@@ -615,10 +653,9 @@ async function processPayment(level, price) {
 
         // USDC на Polygon (6 decimals)
         const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.floor(price * 1e6); // USDC = 6 decimals
+        const usdcAmount = Math.floor(price * 1e6);
         const amountHex = usdcAmount.toString(16).padStart(64, '0');
         const recipientHex = CONFIG.OWNER_WALLET.slice(2).padStart(64, '0');
-        // transfer(address,uint256) selector = 0xa9059cbb
         const data = '0xa9059cbb' + recipientHex + amountHex;
 
         const txHash = await window.ethereum.request({
@@ -635,7 +672,7 @@ async function processPayment(level, price) {
             );
             const verifyData = await verifyRes.json();
             if (verifyData.ok) {
-                showNotification('✅ Платёж подтверждён', 'success');
+                showNotification('✅ Платёж подтвержден', 'success');
                 return txHash;
             }
             if (verifyData.reason && !verifyData.reason.includes('not found')) {
@@ -656,6 +693,10 @@ async function processPayment(level, price) {
         return null;
     }
 }
+
+// ============================================================
+// ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений)
+// ============================================================
 
 function addUserMessage(text) {
     removeWelcomeMessage();
@@ -817,17 +858,6 @@ function finalizeAssistantMessage(id, crystal) {
     }
 }
 
-
-// ============================================================
-// v5.0: Debounce [F11]
-// ============================================================
-// debounce определён выше
-
-// Применяем debounce к input
-// ============================================================
-// УТИЛИТЫ — escapeHtml, showNotification, scrollToBottom, etc.
-// ============================================================
-
 function escapeHtml(text) {
     if (!text) return '';
     return String(text)
@@ -841,22 +871,17 @@ function escapeHtml(text) {
 function formatMessage(text) {
     if (!text) return '';
     text = escapeHtml(text);
-    // Заголовки
     text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
     text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
     text = text.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-    // Bold и italic
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Code
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Списки
     text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
     text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
     text = text.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
     text = text.replace(/(<oli>.*<\/oli>)/gs, '<ol>$1</ol>');
     text = text.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
-    // Переносы строк (не внутри тегов)
     text = text.replace(/\n/g, '<br>');
     return text;
 }
@@ -915,10 +940,8 @@ function showCrystal(crystalId) {
     const crystal = crystals.find(c => String(c.id) === String(crystalId));
     if (!crystal) return;
 
-    // Показываем кристалл в чате
     removeWelcomeMessage();
 
-    // Добавляем вопрос
     const userDiv = document.createElement('div');
     userDiv.className = 'message user';
     userDiv.innerHTML = `
@@ -929,7 +952,6 @@ function showCrystal(crystalId) {
     `;
     elements.messages.appendChild(userDiv);
 
-    // Добавляем ответ
     const msgId = 'crystal_' + crystalId + '_' + Date.now();
     const assistantDiv = document.createElement('div');
     assistantDiv.className = 'message assistant';
@@ -956,7 +978,6 @@ function showCrystal(crystalId) {
     elements.messages.appendChild(assistantDiv);
     scrollToBottom();
 
-    // Закрываем sidebar на мобиле
     if (window.innerWidth <= 768) {
         document.getElementById('sidebar')?.classList.remove('show');
         document.getElementById('sidebarOverlay')?.classList.remove('show');
@@ -967,16 +988,12 @@ function applyLevel(level) {
     if (elements.levelSelect) elements.levelSelect.value = level;
 }
 
-// openSettings — определена ниже с loadSavedKeys
-
-
 document.addEventListener('DOMContentLoaded', () => {
     checkTermsAgreement();
     init();
-    loadLevelOptions(); // загружаем актуальные цены в селект
+    loadLevelOptions();
 });
 
-// Загружает актуальные цены/лимиты из API и обновляет селект уровней
 async function loadLevelOptions() {
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/levels`);
@@ -1000,7 +1017,7 @@ async function loadLevelOptions() {
 }
 
 // ============================================================
-// v5.0: Пользовательское соглашение
+// Пользовательское соглашение
 // ============================================================
 const TERMS_VERSION = 'v5.0-2026-03-11';
 
@@ -1073,9 +1090,6 @@ function declineTerms() {
     window.location.href = 'https://google.com';
 }
 
-// ============================================================
-// handleInput — обновляет рекомендуемый уровень при вводе
-// ============================================================
 async function handleInput() {
     const question = document.getElementById('userInput')?.value?.trim();
     if (!question || question.length < 3) return;
@@ -1087,10 +1101,6 @@ async function handleInput() {
         if (el && data.level) el.textContent = data.level;
     } catch { /* silent */ }
 }
-
-// ============================================================
-// SETTINGS — closeSettings, saveSettings, loadSavedKeys
-// ============================================================
 
 function closeSettings() {
     const modal = document.getElementById('settingsModal');
@@ -1104,12 +1114,10 @@ async function saveSettings() {
     const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
-    // Сохраняем локально
     if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
-    if (ownerWallet)  { localStorage.setItem('brain_owner_wallet', ownerWallet); CONFIG.OWNER_WALLET = ownerWallet; }
+    if (ownerWallet)  { localStorage.setItem('brain_owner_wallet', ownerWallet); }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
-    // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
     if (apiKey && token) {
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/auth/keys/${provider}`, {
@@ -1132,7 +1140,6 @@ async function saveSettings() {
             showNotification('❌ Нет связи с сервером', 'error');
         }
     } else if (apiKey) {
-        // Без авторизации — только в sessionStorage
         sessionStorage.setItem('brain_api_key', apiKey);
         CONFIG.API_KEY = apiKey;
         showNotification('✅ Ключ сохранён локально (подключите кошелёк для сохранения на сервер)', 'info');
@@ -1186,22 +1193,16 @@ async function deleteKey(provider) {
     }
 }
 
-// Показать текущие значения при открытии настроек
 openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
-    // Заполнить поля текущими значениями
     const su = document.getElementById('serverUrl');
     const ow = document.getElementById('ownerWallet');
     if (su) su.value = CONFIG.API_URL || '';
-    if (ow) ow.value = CONFIG.OWNER_WALLET || '';
+    if (ow) ow.value = CONFIG.OWNER_WALLET || localStorage.getItem('brain_owner_wallet') || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
-
-// ============================================================
-// THEME — toggleTheme
-// ============================================================
 
 function toggleTheme() {
     const html = document.documentElement;
@@ -1212,14 +1213,9 @@ function toggleTheme() {
     CONFIG.THEME = next;
 }
 
-// ============================================================
-// HISTORY — clearHistory
-// ============================================================
-
 function clearHistory() {
     const messages = elements.messages;
     if (!messages) return;
-    // Оставляем только welcome-message
     const welcome = document.getElementById('welcomeMessage');
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
@@ -1230,10 +1226,6 @@ function clearHistory() {
     sessionStorage.removeItem('brain_history');
     showNotification('🗑️ История очищена', 'info');
 }
-
-// ============================================================
-// SUGGEST — applySuggestedLevel
-// ============================================================
 
 function applySuggestedLevel() {
     const suggestEl = document.getElementById('suggestLevel');
@@ -1247,9 +1239,8 @@ function applySuggestedLevel() {
 }
 
 // ============================================================
-// WEBSOCKET — подключение и live-обновления кристаллов
+// WEBSOCKET
 // ============================================================
-
 let ws = null;
 let wsReconnectTimer = null;
 let wsReconnectAttempts = 0;
@@ -1273,11 +1264,9 @@ function connectWebSocket() {
     ws.onopen = () => {
         wsReconnectAttempts = 0;
         setWsIndicator('connected');
-        // Авторизуемся если есть токен
         if (token) {
             ws.send(JSON.stringify({ type: 'auth', token }));
         }
-        // Подписываемся на обновления кристаллов
         ws.send(JSON.stringify({ type: 'subscribe', channel: 'crystals' }));
     };
 
@@ -1292,7 +1281,6 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         setWsIndicator('error');
-        // Реконнект с экспоненциальной задержкой, макс 30с
         const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
         wsReconnectAttempts++;
         wsReconnectTimer = setTimeout(connectWebSocket, delay);
@@ -1302,7 +1290,6 @@ function connectWebSocket() {
 function handleWsMessage(msg) {
     switch (msg.type) {
         case 'welcome':
-            // Сервер приветствует — ничего
             break;
         case 'auth':
             if (msg.status === 'success' && msg.role === 'architect') {
@@ -1311,11 +1298,9 @@ function handleWsMessage(msg) {
             }
             break;
         case 'crystal:update':
-            // Живое обновление — перезагружаем список
             loadCrystals();
             break;
         case 'pong':
-            // heartbeat OK
             break;
         case 'error':
             console.warn('WS error:', msg.message);
@@ -1337,29 +1322,24 @@ function setWsIndicator(state) {
     el.className = `ws-indicator ${s.cls}`;
 }
 
-// WS heartbeat — пингуем каждые 25с чтобы соединение не закрылось
 setInterval(() => {
     if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));
     }
 }, 25000);
 
-// ============================================================
-// INIT — патч: добавить WS + openSettings после загрузки
-// ============================================================
 const _origInit = init;
 init = async function() {
+    await loadOwnerWallet(); // ещё раз на всякий случай
     await _origInit();
-    // Запускаем WS если есть API_URL
     if (CONFIG.API_URL) {
         connectWebSocket();
     }
 };
 
 // ============================================================
-// 👑 КАБИНЕТ АРХИТЕКТОРА
+// АДМИН-ПАНЕЛЬ
 // ============================================================
-
 function openAdminPanel() {
     if (!token) return showNotification(currentLang === 'ru' ? 'Необходима авторизация через MetaMask' : 'MetaMask authorization required', 'warning');
     document.getElementById('adminPanel').style.display = 'flex';
@@ -1404,7 +1384,6 @@ async function adminFetch(path, opts = {}) {
     return res.json();
 }
 
-// ─── СТАТИСТИКА ──────────────────────────────────────────────
 async function loadAdminStats() {
     try {
         const d = await adminFetch('/api/admin/stats');
@@ -1423,7 +1402,6 @@ async function loadAdminStats() {
                 <div class="admin-stat-row"><span>Запросов всего</span><b>${d.users.total_queries}</b></div>
                 <div class="admin-stat-row"><span>Потрачено ($)</span><b>${parseFloat(d.users.total_spent || 0).toFixed(2)}</b></div>
             </div>
-
             <div class="admin-card">
                 <div class="admin-card-title">💎 Кристаллы</div>
                 <div class="admin-stat-row"><span>Всего</span><b>${d.crystals.total}</b></div>
@@ -1434,7 +1412,6 @@ async function loadAdminStats() {
                 <div class="admin-stat-row danger"><span>🦠 Virus</span><b>${d.crystals.virus}</b></div>
                 <div class="admin-stat-row"><span>🌐 Глобальных</span><b>${d.crystals.global}</b></div>
             </div>
-
             <div class="admin-card">
                 <div class="admin-card-title">🛡️ Атаки (24ч)</div>
                 <div class="admin-stat-row danger"><span>Всего</span><b>${d.attacks.total_24h}</b></div>
@@ -1442,7 +1419,6 @@ async function loadAdminStats() {
                 <div class="admin-stat-row warn"><span>Jailbreak</span><b>${d.attacks.jailbreak}</b></div>
                 <div class="admin-stat-row warn"><span>Extraction</span><b>${d.attacks.extraction}</b></div>
             </div>
-
             <div class="admin-card">
                 <div class="admin-card-title">🔑 Мастер-ключ</div>
                 <div class="admin-stat-row"><span>Использовано сегодня</span><b>${mk.used_today} / ${mk.limit}</b></div>
@@ -1451,7 +1427,6 @@ async function loadAdminStats() {
                 </div>
                 <div class="admin-stat-row"><span>Осталось</span><b>${mk.limit - mk.used_today}</b></div>
             </div>
-
             <div class="admin-card">
                 <div class="admin-card-title">💰 Экономика</div>
                 <div class="admin-stat-row ok"><span>Подтверждено</span><b>${d.payments.confirmed}</b></div>
@@ -1468,7 +1443,6 @@ async function loadAdminStats() {
     }
 }
 
-// ─── ПОЛЬЗОВАТЕЛИ ────────────────────────────────────────────
 async function loadAdminUsers(search = '', blocked = '') {
     try {
         const qs = new URLSearchParams({ limit: 100, ...(search && {search}), ...(blocked && {blocked}) });
@@ -1486,10 +1460,10 @@ async function loadAdminUsers(search = '', blocked = '') {
         </div>
         <div class="admin-table-wrap">
         <table class="admin-table">
-            <thead><tr>
+            <thead>前后
                 <th>ID</th><th>Кошелёк</th><th>Роль</th><th>Запросов</th>
                 <th>Кристаллов</th><th>Потрачено</th><th>Последний вход</th><th>Действия</th>
-            </tr></thead>
+             </thead>
             <tbody>${d.users.map(u => `
             <tr class="${u.is_blocked ? 'row-blocked' : ''}">
                 <td>${u.id}</td>
@@ -1531,7 +1505,6 @@ async function adminToggleRole(userId, is_architect) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
-// ─── КРИСТАЛЛЫ ───────────────────────────────────────────────
 async function loadAdminCrystals(status = '', global_only = false) {
     try {
         const qs = new URLSearchParams({ limit: 100, ...(status && {status}), ...(global_only && {is_global: 'true'}) });
@@ -1604,7 +1577,6 @@ async function adminDeleteCrystal(id) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
-// ─── АТАКИ ───────────────────────────────────────────────────
 async function loadAdminAttacks() {
     try {
         const d = await adminFetch('/api/admin/attacks?hours=24');
@@ -1620,9 +1592,7 @@ async function loadAdminAttacks() {
                 <td><b class="${ip.total > 10 ? 'text-danger' : ''}">${ip.total}</b></td>
                 <td>${ip.attack_types?.join(', ')}</td>
                 <td>${new Date(ip.last_seen).toLocaleTimeString()}</td>
-                <td>
-                    <button class="admin-btn-sm danger" onclick="adminBlockIp('${ip.ip}')">🚫 Блок</button>
-                </td>
+                <td><button class="admin-btn-sm danger" onclick="adminBlockIp('${ip.ip}')">🚫 Блок</button></td>
             </tr>`).join('')}
             </tbody>
         </table></div>
@@ -1641,9 +1611,7 @@ async function loadAdminAttacks() {
             </tbody>
         </table></div>
 
-        <div style="margin-top:12px">
-            <button class="admin-btn-sm" onclick="adminBlockIp()">➕ Заблокировать IP вручную</button>
-        </div>
+        <div style="margin-top:12px"><button class="admin-btn-sm" onclick="adminBlockIp()">➕ Заблокировать IP вручную</button></div>
 
         <div class="admin-section-title" style="margin-top:20px">🛡️ Режим фильтрации запросов</div>
         <div class="admin-card" style="margin-top:8px" id="filterModeCard">
@@ -1687,7 +1655,6 @@ async function adminUnblockIp(ip) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
-// ─── ПРОМПТЫ ─────────────────────────────────────────────────
 async function loadAdminPrompts() {
     try {
         const d = await adminFetch('/api/admin/prompts');
@@ -1735,7 +1702,6 @@ async function adminCreatePrompt() {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
-// ─── ЭКОНОМИКА ───────────────────────────────────────────────
 async function loadAdminEconomy() {
     try {
         const [payments, masterKey] = await Promise.all([
@@ -1767,25 +1733,25 @@ async function loadAdminEconomy() {
         <div class="admin-section-title">Последние транзакции</div>
         <div class="admin-table-wrap">
         <table class="admin-table">
-            <thead><tr><th>ID</th><th>Кошелёк</th><th>TX Hash</th><th>Сумма</th><th>Уровень</th><th>Статус</th><th>Дата</th></tr></thead>
+            <thead> <th>ID</th><th>Кошелёк</th><th>TX Hash</th><th>Сумма</th><th>Уровень</th><th>Статус</th><th>Дата</th> </thead>
             <tbody>${payments.payments.map(p => `
-            <tr>
-                <td>${p.id}</td>
+             <tr>
+                 <td>${p.id}</td>
                 <td title="${p.wallet}">${p.wallet?.slice(0,8)}...</td>
                 <td><a href="https://polygonscan.com/tx/${p.tx_hash}" target="_blank" style="color:var(--accent)">${p.tx_hash?.slice(0,10)}...</a></td>
                 <td>$${p.amount}</td>
                 <td>${p.level}</td>
                 <td><span class="status-badge ${p.status}">${p.status}</span></td>
                 <td>${new Date(p.created_at).toLocaleDateString()}</td>
-            </tr>`).join('')}
+             </tr>`).join('')}
             </tbody>
-        </table></div>`;
+         </table>
+        </div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
 }
 
-// ─── УРОВНИ (вкладка кабинета архитектора) ───────────────────
 async function loadAdminLevels() {
     try {
         const d = await adminFetch('/api/admin/levels');
@@ -1798,64 +1764,24 @@ async function loadAdminLevels() {
         </div>
         <div class="admin-table-wrap">
         <table class="admin-table levels-table">
-            <thead><tr>
-                <th>Уровень</th>
-                <th>Описание</th>
-                <th>Цена ($)</th>
-                <th>Токены</th>
-                <th>Лимит/день</th>
-                <th>Обновлён</th>
-                <th></th>
-            </tr></thead>
+            <thead> <th>Уровень</th><th>Описание</th><th>Цена ($)</th><th>Токены</th><th>Лимит/день</th><th>Обновлён</th><th></th> </thead>
             <tbody>${d.levels.map(l => `
             <tr id="level-row-${l.level}">
                 <td><b class="level-badge level-${l.level}">${l.level}</b></td>
-                <td>
-                    <input class="admin-input level-input" id="desc_${l.level}"
-                        value="${l.description || ''}" placeholder="Описание">
-                </td>
-                <td>
-                    <input class="admin-input level-input level-num" id="price_${l.level}"
-                        type="number" min="0" step="0.01"
-                        value="${parseFloat(l.price).toFixed(2)}"
-                        placeholder="0.00">
-                </td>
-                <td>
-                    <input class="admin-input level-input level-num" id="tokens_${l.level}"
-                        type="number" min="100" step="100"
-                        value="${l.tokens}"
-                        placeholder="300">
-                </td>
-                <td>
-                    <input class="admin-input level-input level-num" id="limit_${l.level}"
-                        type="number" min="0" step="1"
-                        value="${l.daily_limit}"
-                        placeholder="0 = ∞">
-                </td>
-                <td style="font-size:11px;opacity:.5">
-                    ${l.updated_at ? new Date(l.updated_at).toLocaleDateString() : '—'}
-                </td>
-                <td>
-                    <button class="admin-btn-sm ok" onclick="adminSaveLevel('${l.level}')">
-                        💾 Сохранить
-                    </button>
-                </td>
+                <td><input class="admin-input level-input" id="desc_${l.level}" value="${l.description || ''}" placeholder="Описание"></td>
+                <td><input class="admin-input level-input level-num" id="price_${l.level}" type="number" min="0" step="0.01" value="${parseFloat(l.price).toFixed(2)}" placeholder="0.00"></td>
+                <td><input class="admin-input level-input level-num" id="tokens_${l.level}" type="number" min="100" step="100" value="${l.tokens}" placeholder="300"></td>
+                <td><input class="admin-input level-input level-num" id="limit_${l.level}" type="number" min="0" step="1" value="${l.daily_limit}" placeholder="0 = ∞"></td>
+                <td style="font-size:11px;opacity:.5">${l.updated_at ? new Date(l.updated_at).toLocaleDateString() : '—'}</td>
+                <td><button class="admin-btn-sm ok" onclick="adminSaveLevel('${l.level}')">💾 Сохранить</button></td>
             </tr>`).join('')}
             </tbody>
-        </table></div>
+         </table>
+        </div>
         <div class="levels-info">
-            <div class="levels-info-row">
-                <span>🆓 Бесплатный уровень</span>
-                <span>Цена = 0, лимит > 0</span>
-            </div>
-            <div class="levels-info-row">
-                <span>💰 Платный уровень</span>
-                <span>Цена > 0, разовая оплата ETH</span>
-            </div>
-            <div class="levels-info-row">
-                <span>♾️ Безлимитный</span>
-                <span>Лимит = 0</span>
-            </div>
+            <div class="levels-info-row"><span>🆓 Бесплатный уровень</span><span>Цена = 0, лимит > 0</span></div>
+            <div class="levels-info-row"><span>💰 Платный уровень</span><span>Цена > 0, разовая оплата ETH</span></div>
+            <div class="levels-info-row"><span>♾️ Безлимитный</span><span>Лимит = 0</span></div>
         </div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
@@ -1863,8 +1789,8 @@ async function loadAdminLevels() {
 }
 
 async function adminSaveLevel(level) {
-    const price      = document.getElementById(`price_${level}`)?.value;
-    const tokens     = document.getElementById(`tokens_${level}`)?.value;
+    const price = document.getElementById(`price_${level}`)?.value;
+    const tokens = document.getElementById(`tokens_${level}`)?.value;
     const daily_limit = document.getElementById(`limit_${level}`)?.value;
     const description = document.getElementById(`desc_${level}`)?.value;
 
@@ -1878,16 +1804,10 @@ async function adminSaveLevel(level) {
 
         await adminFetch(`/api/admin/levels/${level}`, {
             method: 'PATCH',
-            body: {
-                price:       parseFloat(price),
-                tokens:      parseInt(tokens),
-                daily_limit: parseInt(daily_limit),
-                description
-            }
+            body: { price: parseFloat(price), tokens: parseInt(tokens), daily_limit: parseInt(daily_limit), description }
         });
 
         if (row) row.style.opacity = '1';
-        // Обновляем селект уровней в основном интерфейсе
         updateLevelSelect(level, parseFloat(price));
     } catch(e) {
         alert('Ошибка: ' + e.message);
@@ -1896,17 +1816,12 @@ async function adminSaveLevel(level) {
     }
 }
 
-// Обновляем подписи в главном селекте уровней после изменения цены
 function updateLevelSelect(level, price) {
     const opt = document.querySelector(`#levelSelect option[value="${level}"]`);
     if (!opt) return;
     const label = price === 0 ? `${level} Free` : `${level} $${price}`;
     opt.textContent = label;
 }
-
-// ============================================================
-// 👤 ЛИЧНЫЙ КАБИНЕТ ПОЛЬЗОВАТЕЛЯ
-// ============================================================
 
 async function openProfile() {
     if (!token) {
@@ -1927,128 +1842,43 @@ async function loadProfile() {
     body.innerHTML = '<div style="text-align:center;padding:40px;opacity:.5">⏳ Загрузка...</div>';
 
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/auth/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await fetch(`${CONFIG.API_URL}/api/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!res.ok) throw new Error('Не удалось загрузить профиль');
         const d = await res.json();
         const p = d.profile;
         const c = d.crystals;
 
-        // Дневные лимиты
         const limitsHtml = Object.entries(d.limits || {}).map(([lvl, l]) => {
             const pct = Math.round(l.used / l.limit * 100);
             const color = pct >= 100 ? '#f87171' : pct >= 70 ? '#fbbf24' : '#4ade80';
-            return `
-            <div class="profile-limit-row">
-                <span class="level-badge level-${lvl}">${lvl}</span>
-                <div class="profile-limit-bar">
-                    <div class="profile-limit-fill" style="width:${pct}%;background:${color}"></div>
-                </div>
-                <span class="profile-limit-text">${l.used} / ${l.limit}</span>
-            </div>`;
+            return `<div class="profile-limit-row"><span class="level-badge level-${lvl}">${lvl}</span><div class="profile-limit-bar"><div class="profile-limit-fill" style="width:${pct}%;background:${color}"></div></div><span class="profile-limit-text">${l.used} / ${l.limit}</span></div>`;
         }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
 
-        // История платежей
-        const paymentsHtml = d.payments.length
-            ? d.payments.map(p => `
-            <div class="profile-payment-row">
-                <span class="status-badge ${p.status}">${p.status}</span>
-                <span class="level-badge level-${p.level}">${p.level}</span>
-                <span class="profile-payment-amount">$${p.amount}</span>
-                <span class="profile-payment-date">${new Date(p.created_at).toLocaleDateString()}</span>
-                <a href="https://polygonscan.com/tx/${p.tx_hash}" target="_blank" class="profile-tx-link" title="${p.tx_hash}">
-                    🔗 TX
-                </a>
-            </div>`).join('')
-            : '<div class="profile-empty">Платежей пока нет</div>';
+        const paymentsHtml = d.payments.length ? d.payments.map(p => `<div class="profile-payment-row"><span class="status-badge ${p.status}">${p.status}</span><span class="level-badge level-${p.level}">${p.level}</span><span class="profile-payment-amount">$${p.amount}</span><span class="profile-payment-date">${new Date(p.created_at).toLocaleDateString()}</span><a href="https://polygonscan.com/tx/${p.tx_hash}" target="_blank" class="profile-tx-link">🔗 TX</a></div>`).join('') : '<div class="profile-empty">Платежей пока нет</div>';
 
-        body.innerHTML = `
-        <div class="profile-grid">
-
-            <!-- Профиль -->
-            <div class="profile-card">
-                <div class="profile-wallet">
-                    <span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span>
-                    <div>
-                        <div class="profile-wallet-addr" title="${p.wallet}">
-                            ${p.wallet?.slice(0,10)}...${p.wallet?.slice(-6)}
-                        </div>
-                        <div class="profile-role">${p.is_architect ? 'Архитектор' : 'Пользователь'}</div>
-                    </div>
-                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="Скопировать адрес">📋</button>
-                </div>
-                <div class="profile-stat-row">
-                    <span>📅 Регистрация</span>
-                    <b>${new Date(p.created_at).toLocaleDateString()}</b>
-                </div>
-                <div class="profile-stat-row">
-                    <span>🕐 Последний вход</span>
-                    <b>${p.last_login ? new Date(p.last_login).toLocaleDateString() : '—'}</b>
-                </div>
-                <div class="profile-stat-row">
-                    <span>❓ Всего запросов</span>
-                    <b>${p.total_queries}</b>
-                </div>
-                <div class="profile-stat-row highlight">
-                    <span>💸 Потрачено</span>
-                    <b>$${p.total_spent}</b>
-                </div>
+        body.innerHTML = `<div class="profile-grid">
+            <div class="profile-card"><div class="profile-wallet"><span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span><div><div class="profile-wallet-addr" title="${p.wallet}">${p.wallet?.slice(0,10)}...${p.wallet?.slice(-6)}</div><div class="profile-role">${p.is_architect ? 'Архитектор' : 'Пользователь'}</div></div><button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="Скопировать адрес">📋</button></div>
+                <div class="profile-stat-row"><span>📅 Регистрация</span><b>${new Date(p.created_at).toLocaleDateString()}</b></div>
+                <div class="profile-stat-row"><span>🕐 Последний вход</span><b>${p.last_login ? new Date(p.last_login).toLocaleDateString() : '—'}</b></div>
+                <div class="profile-stat-row"><span>❓ Всего запросов</span><b>${p.total_queries}</b></div>
+                <div class="profile-stat-row highlight"><span>💸 Потрачено</span><b>$${p.total_spent}</b></div>
             </div>
-
-            <!-- Кристаллы -->
-            <div class="profile-card">
-                <div class="profile-card-title">💎 Мои кристаллы</div>
-                <div class="profile-crystals-grid">
-                    <div class="profile-crystal-stat">
-                        <span class="profile-crystal-num">${c.total}</span>
-                        <span class="profile-crystal-label">всего</span>
-                    </div>
-                    <div class="profile-crystal-stat diamonds">
-                        <span class="profile-crystal-num">${c.diamonds}</span>
-                        <span class="profile-crystal-label">💎 кристалл</span>
-                    </div>
-                    <div class="profile-crystal-stat verified">
-                        <span class="profile-crystal-num">${c.verified}</span>
-                        <span class="profile-crystal-label">✅</span>
-                    </div>
-                    <div class="profile-crystal-stat quarantine">
-                        <span class="profile-crystal-num">${c.quarantine}</span>
-                        <span class="profile-crystal-label">🔬</span>
-                    </div>
-                    <div class="profile-crystal-stat virus">
-                        <span class="profile-crystal-num">${c.virus}</span>
-                        <span class="profile-crystal-label">🦠</span>
-                    </div>
-                    <div class="profile-crystal-stat today">
-                        <span class="profile-crystal-num">${c.today}</span>
-                        <span class="profile-crystal-label">сегодня</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Дневные лимиты -->
-            <div class="profile-card">
-                <div class="profile-card-title">📊 Лимиты сегодня</div>
-                <div class="profile-limits">${limitsHtml}</div>
-                <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
-            </div>
-
-            <!-- История платежей -->
-            <div class="profile-card profile-card-wide">
-                <div class="profile-card-title">💰 История платежей</div>
-                <div class="profile-payments">${paymentsHtml}</div>
-            </div>
-
+            <div class="profile-card"><div class="profile-card-title">💎 Мои кристаллы</div><div class="profile-crystals-grid">
+                <div class="profile-crystal-stat"><span class="profile-crystal-num">${c.total}</span><span class="profile-crystal-label">всего</span></div>
+                <div class="profile-crystal-stat diamonds"><span class="profile-crystal-num">${c.diamonds}</span><span class="profile-crystal-label">💎 кристалл</span></div>
+                <div class="profile-crystal-stat verified"><span class="profile-crystal-num">${c.verified}</span><span class="profile-crystal-label">✅</span></div>
+                <div class="profile-crystal-stat quarantine"><span class="profile-crystal-num">${c.quarantine}</span><span class="profile-crystal-label">🔬</span></div>
+                <div class="profile-crystal-stat virus"><span class="profile-crystal-num">${c.virus}</span><span class="profile-crystal-label">🦠</span></div>
+                <div class="profile-crystal-stat today"><span class="profile-crystal-num">${c.today}</span><span class="profile-crystal-label">сегодня</span></div>
+            </div></div>
+            <div class="profile-card"><div class="profile-card-title">📊 Лимиты сегодня</div><div class="profile-limits">${limitsHtml}</div><div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div></div>
+            <div class="profile-card profile-card-wide"><div class="profile-card-title">💰 История платежей</div><div class="profile-payments">${paymentsHtml}</div></div>
         </div>`;
-
     } catch(e) {
         body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px">❌ ${e.message}</div>`;
     }
 }
 
-
-// ─── РЕЖИМ ФИЛЬТРАЦИИ ────────────────────────────────────────
 async function adminSetFilterMode(mode) {
     const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
     if (!confirm(`Установить режим фильтрации: ${labels[mode]}?`)) return;
