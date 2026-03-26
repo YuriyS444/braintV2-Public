@@ -590,8 +590,8 @@ async function processPayment(level, price) {
 
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
-        `Сумма: $${price} USD (в POL по текущему курсу)\n` +
-        `Сеть: Polygon (MATIC)\n` +
+        `Сумма: ${price} USDC\n` +
+        `Токен: USDC (Polygon)\n` +
         `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
         `После оплаты ответ будет получен автоматически.\nПродолжить?`
     );
@@ -613,11 +613,17 @@ async function processPayment(level, price) {
             }
         }
 
-        const wei = '0x' + Math.floor(price * 1e18).toString(16);
+        // USDC на Polygon (6 decimals)
+        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+        const usdcAmount = Math.floor(price * 1e6); // USDC = 6 decimals
+        const amountHex = usdcAmount.toString(16).padStart(64, '0');
+        const recipientHex = CONFIG.OWNER_WALLET.slice(2).padStart(64, '0');
+        // transfer(address,uint256) selector = 0xa9059cbb
+        const data = '0xa9059cbb' + recipientHex + amountHex;
 
         const txHash = await window.ethereum.request({
             method: 'eth_sendTransaction',
-            params: [{ from: wallet, to: CONFIG.OWNER_WALLET, value: wei }]
+            params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
         });
 
         showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
