@@ -588,6 +588,20 @@ async function processPayment(level, price) {
         if (!wallet) return null;
     }
 
+    // Если кошелёк получателя не загружен — загружаем сейчас
+    if (!CONFIG.OWNER_WALLET) {
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/levels`);
+            const data = await res.json();
+            if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
+        } catch {}
+    }
+
+    if (!CONFIG.OWNER_WALLET) {
+        showNotification('❌ Ошибка: адрес получателя не загружен', 'error');
+        return null;
+    }
+
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
         `Сумма: ${price} USDC\n` +
@@ -611,6 +625,19 @@ async function processPayment(level, price) {
                     params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
                 });
             }
+        }
+
+        // Убеждаемся что кошелёк получателя загружен
+        if (!CONFIG.OWNER_WALLET) {
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/levels`);
+                const data = await res.json();
+                if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
+            } catch {}
+        }
+        if (!CONFIG.OWNER_WALLET) {
+            showNotification('❌ Кошелёк получателя не загружен. Попробуйте позже.', 'error');
+            return null;
         }
 
         // USDC на Polygon (6 decimals)
