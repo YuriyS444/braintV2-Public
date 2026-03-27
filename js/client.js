@@ -2,7 +2,7 @@ const CONFIG = {
     API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
     ARCHITECT_KEY: sessionStorage.getItem('brain_architect_key') || '',
-    OWNER_WALLET: localStorage.getItem('brain_owner_wallet') || '',
+    OWNER_WALLET: '', // загружается с сервера автоматически
     PROVIDER: localStorage.getItem('brain_provider') || 'deepseek',
     THEME: localStorage.getItem('brain_theme') || 'dark'
 };
@@ -1106,7 +1106,6 @@ async function saveSettings() {
 
     // Сохраняем локально
     if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
-    if (ownerWallet)  { localStorage.setItem('brain_owner_wallet', ownerWallet); CONFIG.OWNER_WALLET = ownerWallet; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
     // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
@@ -1192,9 +1191,7 @@ openSettings = function() {
     if (!modal) return;
     // Заполнить поля текущими значениями
     const su = document.getElementById('serverUrl');
-    const ow = document.getElementById('ownerWallet');
     if (su) su.value = CONFIG.API_URL || '';
-    if (ow) ow.value = CONFIG.OWNER_WALLET || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
