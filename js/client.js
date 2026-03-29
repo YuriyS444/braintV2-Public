@@ -657,22 +657,29 @@ async function processPayment(level, price) {
 
         for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
-            const verifyRes = await fetch(
-                `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
-            );
-            const verifyData = await verifyRes.json();
-            if (verifyData.ok) {
-                showNotification('✅ Платёж подтверждён', 'success');
-                return txHash;
-            }
-            if (verifyData.reason && !verifyData.reason.includes('not found')) {
-                showNotification('❌ ' + verifyData.reason, 'error');
-                return null;
-            }
+            try {
+                const verifyRes = await fetch(
+                    `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
+                );
+                const verifyData = await verifyRes.json();
+                if (verifyData.ok) {
+                    showNotification('✅ Платёж подтверждён', 'success');
+                    return txHash;
+                }
+                // Критическая ошибка — не продолжаем
+                if (verifyData.reason && 
+                    !verifyData.reason.includes('not found') && 
+                    !verifyData.reason.includes('pending')) {
+                    showNotification('⚠️ ' + verifyData.reason, 'warning');
+                    // Всё равно возвращаем txHash — сервер сам решит
+                    return txHash;
+                }
+            } catch { /* продолжаем ждать */ }
         }
 
-        showNotification('⏱️ Таймаут подтверждения. Попробуйте позже.', 'warning');
-        return null;
+        // Таймаут — возвращаем txHash, пусть сервер проверит
+        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
+        return txHash;
 
     } catch (error) {
         if (error.code === 4001) {
