@@ -41,8 +41,9 @@ const elements = {
     progressBar: document.querySelector('.progress-bar')
 };
 
+
 // ============================================================
-// Индикатор угроз
+// Индикатор угроз — показывает уровень атак из attack_logs
 // ============================================================
 async function updateThreatIndicator() {
     const el = elements.threatIndicator;
@@ -66,7 +67,7 @@ async function updateThreatIndicator() {
         const info = map[level] || map.low;
         el.textContent = info.icon;
         el.title = info.title;
-    } catch { /* silent */ }
+    } catch { /* silent — не мешаем UI */ }
 }
 
 async function init() {
@@ -95,7 +96,7 @@ function debounce(func, wait) {
 
 async function connectWallet() {
     if (!window.ethereum) {
-        showNotification('Установите MetaMask', 'error');
+        showNotification(currentLang === 'ru' ? 'Установите MetaMask' : 'Install MetaMask', 'error');
         return;
     }
     
@@ -126,7 +127,7 @@ async function connectWallet() {
         }
         
     } catch (error) {
-        showNotification('Ошибка подключения: ' + error.message, 'error');
+        showNotification((currentLang === 'ru' ? 'Ошибка подключения: ' : 'Connection error: ') + error.message, 'error');
     }
 }
 
@@ -161,7 +162,7 @@ async function login() {
         
         if (isArchitect) {
             elements.architectBadge.style.display = 'inline-block';
-            showNotification('👑 Режим архитектора активирован', 'success');
+            showNotification(currentLang === 'ru' ? '👑 Режим архитектора активирован' : '👑 Architect mode activated', 'success');
         }
         
         await loadCrystals();
@@ -293,13 +294,13 @@ function handleSearch() {
 
 async function syncFromDB() {
     if (!token || !wallet) {
-        showNotification('Подключите кошелёк', 'warning');
+        showNotification(currentLang === 'ru' ? 'Подключите кошелёк' : 'Connect wallet', 'warning');
         return;
     }
     
-    showNotification('Синхронизация...', 'info');
+    showNotification(currentLang === 'ru' ? 'Синхронизация...' : 'Syncing...', 'info');
     await loadCrystals();
-    showNotification('✅ Синхронизировано', 'success');
+    showNotification(currentLang === 'ru' ? '✅ Синхронизировано' : '✅ Synced', 'success');
 }
 
 function exportCrystals() {
@@ -341,104 +342,13 @@ function importCrystals() {
             await loadCrystals();
             
         } catch (error) {
-            showNotification('❌ Ошибка импорта', 'error');
+            showNotification(currentLang === 'ru' ? '❌ Ошибка импорта' : '❌ Import error', 'error');
         }
     };
     
     input.click();
 }
 
-// ============================================================
-// ФУНКЦИЯ ОПЛАТЫ (адаптирована под новую систему)
-// ============================================================
-async function processPayment(level, price, ownerWallet) {
-    if (!price || price <= 0) return null;
-
-    if (!wallet) {
-        await connectWallet();
-        if (!wallet) return null;
-    }
-
-    const confirmed = confirm(
-        `💳 Оплата уровня ${level}\n\n` +
-        `Сумма: ${price} USDC\n` +
-        `Токен: USDC (Polygon)\n` +
-        `Получатель: ${ownerWallet}\n\n` +
-        `После оплаты ответ будет получен автоматически.\nПродолжить?`
-    );
-    if (!confirmed) return null;
-
-    try {
-        // Переключаемся на Polygon
-        try {
-            await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x89' }]
-            });
-        } catch (switchError) {
-            if (switchError.code === 4902) {
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: '0x89',
-                        chainName: 'Polygon',
-                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                        rpcUrls: ['https://polygon-rpc.com'],
-                        blockExplorerUrls: ['https://polygonscan.com']
-                    }]
-                });
-            }
-        }
-
-        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.floor(price * 1e6);
-        const amountHex = usdcAmount.toString(16).padStart(64, '0');
-        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
-        const data = '0xa9059cbb' + recipientHex + amountHex;
-
-        const txHash = await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
-        });
-
-        showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
-
-        for (let i = 0; i < 12; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            try {
-                const verifyRes = await fetch(
-                    `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
-                );
-                const verifyData = await verifyRes.json();
-
-                if (verifyData.ok) {
-                    showNotification('✅ Платёж подтверждён', 'success');
-                    return txHash;
-                }
-
-                if (verifyData.reason && !verifyData.reason.includes('not found') && !verifyData.reason.includes('pending')) {
-                    showNotification('⚠️ ' + verifyData.reason, 'warning');
-                    return txHash;
-                }
-            } catch { /* продолжаем ждать */ }
-        }
-
-        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
-        return txHash;
-
-    } catch (error) {
-        if (error.code === 4001) {
-            showNotification('Платёж отменён', 'info');
-        } else {
-            showNotification('❌ Ошибка: ' + error.message, 'error');
-        }
-        return null;
-    }
-}
-
-// ============================================================
-// ОБНОВЛЁННЫЙ sendMessage
-// ============================================================
 async function sendMessage() {
     const question = elements.userInput.value.trim();
     if (!question) return;
@@ -473,22 +383,29 @@ async function sendMessage() {
     try {
         let txHash = null;
         let price = 0;
-        let ownerWallet = null;
+        let ownerWallet = CONFIG.OWNER_WALLET;
 
-        // Получаем цену и кошелёк
+        // Получаем цену и кошелёк с сервера
         try {
             const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
             const cfgData = await cfgRes.json();
             const levels = cfgData.levels || {};
-            price = levels[level]?.price || 0;
-            ownerWallet = cfgData.owner_wallet || CONFIG.OWNER_WALLET;
+            price = parseFloat(levels[level]?.price || 0);
+            if (cfgData.owner_wallet) {
+                ownerWallet = cfgData.owner_wallet;
+                CONFIG.OWNER_WALLET = ownerWallet;
+            }
         } catch { /* fallback */ }
 
         // Если нужна оплата
         if (price > 0 && !isArchitect) {
             if (!ownerWallet) {
                 showNotification('❌ Адрес получателя не загружен', 'error');
-                throw new Error('No owner wallet');
+                removeTypingIndicator();
+                if (elements.progressBar) elements.progressBar.style.display = 'none';
+                elements.sendBtn.style.display = 'flex';
+                elements.stopBtn.style.display = 'none';
+                return;
             }
             txHash = await processPayment(level, price, ownerWallet);
             if (!txHash) {
@@ -528,9 +445,6 @@ async function sendMessage() {
     }
 }
 
-// ============================================================
-// ОБНОВЛЁННЫЙ sendNormalMessage
-// ============================================================
 async function sendNormalMessage(question, level, txHash) {
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
@@ -551,17 +465,13 @@ async function sendNormalMessage(question, level, txHash) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
-
-        if (response.status === 402) {
-            throw new Error(`402: ${error.error || 'Payment required'}`);
-        }
+        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
         if (response.status === 429) {
             const msg = error.limit
                 ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.`
                 : error.error;
             throw new Error(msg);
         }
-
         throw new Error(error.error || 'Request failed');
     }
 
@@ -570,10 +480,7 @@ async function sendNormalMessage(question, level, txHash) {
     addAssistantMessage(data.answer, data.crystal, data.level, data.suggestedLevel);
 
     if (data.crystal) {
-        crystals.unshift({
-            id: Date.now(),
-            ...data.crystal
-        });
+        crystals.unshift({ id: Date.now(), ...data.crystal });
         renderCrystals();
         updateStats();
     }
@@ -672,6 +579,92 @@ async function sendStreamMessage(question, level, txHash) {
 function stopGeneration() {
     if (abortController) {
         abortController.abort();
+    }
+}
+
+async function processPayment(level, price, ownerWallet) {
+    if (!price || price <= 0) return null;
+
+    if (!wallet) {
+        await connectWallet();
+        if (!wallet) return null;
+    }
+
+    const confirmed = confirm(
+        `💳 Оплата уровня ${level}\n\n` +
+        `Сумма: ${price} USDC\n` +
+        `Токен: USDC (Polygon)\n` +
+        `Получатель: ${ownerWallet}\n\n` +
+        `После оплаты ответ будет получен автоматически.\nПродолжить?`
+    );
+    if (!confirmed) return null;
+
+    try {
+        // Переключаемся на Polygon
+        try {
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x89' }]
+            });
+        } catch (switchError) {
+            if (switchError.code === 4902) {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: '0x89',
+                        chainName: 'Polygon',
+                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                        rpcUrls: ['https://polygon-rpc.com'],
+                        blockExplorerUrls: ['https://polygonscan.com']
+                    }]
+                });
+            }
+        }
+
+        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+        const usdcAmount = Math.floor(price * 1e6);
+        const amountHex = usdcAmount.toString(16).padStart(64, '0');
+        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
+        const data = '0xa9059cbb' + recipientHex + amountHex;
+
+        const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
+        });
+
+        showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
+
+        for (let i = 0; i < 12; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            try {
+                const verifyRes = await fetch(
+                    `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
+                );
+                const verifyData = await verifyRes.json();
+                if (verifyData.ok) {
+                    showNotification('✅ Платёж подтверждён', 'success');
+                    return txHash;
+                }
+                if (verifyData.reason && 
+                    !verifyData.reason.includes('not found') && 
+                    !verifyData.reason.includes('pending') &&
+                    !verifyData.reason.includes('Waiting')) {
+                    showNotification('⚠️ ' + verifyData.reason, 'warning');
+                    return txHash;
+                }
+            } catch { /* продолжаем ждать */ }
+        }
+
+        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
+        return txHash;
+
+    } catch (error) {
+        if (error.code === 4001) {
+            showNotification('Платёж отменён', 'info');
+        } else {
+            showNotification('❌ Ошибка: ' + error.message, 'error');
+        }
+        return null;
     }
 }
 
@@ -835,8 +828,15 @@ function finalizeAssistantMessage(id, crystal) {
     }
 }
 
+
 // ============================================================
-// УТИЛИТЫ
+// v5.0: Debounce [F11]
+// ============================================================
+// debounce определён выше
+
+// Применяем debounce к input
+// ============================================================
+// УТИЛИТЫ — escapeHtml, showNotification, scrollToBottom, etc.
 // ============================================================
 
 function escapeHtml(text) {
@@ -867,7 +867,7 @@ function formatMessage(text) {
     text = text.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
     text = text.replace(/(<oli>.*<\/oli>)/gs, '<ol>$1</ol>');
     text = text.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
-    // Переносы строк
+    // Переносы строк (не внутри тегов)
     text = text.replace(/\n/g, '<br>');
     return text;
 }
@@ -918,16 +918,18 @@ function copyMessage(messageId) {
     if (!msg) return;
     const text = msg.querySelector('.message-bubble')?.textContent || '';
     navigator.clipboard.writeText(text)
-        .then(() => showNotification('✅ Скопировано', 'success'))
-        .catch(() => showNotification('❌ Ошибка копирования', 'error'));
+        .then(() => showNotification(currentLang === 'ru' ? '✅ Скопировано' : '✅ Copied', 'success'))
+        .catch(() => showNotification(currentLang === 'ru' ? '❌ Ошибка копирования' : '❌ Copy error', 'error'));
 }
 
 function showCrystal(crystalId) {
     const crystal = crystals.find(c => String(c.id) === String(crystalId));
     if (!crystal) return;
 
+    // Показываем кристалл в чате
     removeWelcomeMessage();
 
+    // Добавляем вопрос
     const userDiv = document.createElement('div');
     userDiv.className = 'message user';
     userDiv.innerHTML = `
@@ -938,6 +940,7 @@ function showCrystal(crystalId) {
     `;
     elements.messages.appendChild(userDiv);
 
+    // Добавляем ответ
     const msgId = 'crystal_' + crystalId + '_' + Date.now();
     const assistantDiv = document.createElement('div');
     assistantDiv.className = 'message assistant';
@@ -964,6 +967,7 @@ function showCrystal(crystalId) {
     elements.messages.appendChild(assistantDiv);
     scrollToBottom();
 
+    // Закрываем sidebar на мобиле
     if (window.innerWidth <= 768) {
         document.getElementById('sidebar')?.classList.remove('show');
         document.getElementById('sidebarOverlay')?.classList.remove('show');
@@ -974,12 +978,16 @@ function applyLevel(level) {
     if (elements.levelSelect) elements.levelSelect.value = level;
 }
 
+// openSettings — определена ниже с loadSavedKeys
+
+
 document.addEventListener('DOMContentLoaded', () => {
     checkTermsAgreement();
     init();
-    loadLevelOptions();
+    loadLevelOptions(); // загружаем актуальные цены в селект
 });
 
+// Загружает актуальные цены/лимиты из API и обновляет селект уровней
 async function loadLevelOptions() {
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/levels`);
@@ -993,22 +1001,17 @@ async function loadLevelOptions() {
             const limit = cfg.daily_limit || 0;
             let label = lvl;
             if (price === 0) {
-                label += limit > 0 ? ` Free (${limit}/день)` : ' Free';
+                label += limit > 0 ? ` Free (${limit}/${currentLang === 'ru' ? 'день' : 'day'})` : ' Free';
             } else {
                 label += ` $${price}`;
             }
             return `<option value="${lvl}" ${lvl === 'S0' ? 'selected' : ''}>${label}</option>`;
         }).join('');
-        
-        // Сохраняем кошелёк получателя
-        if (data.owner_wallet) {
-            CONFIG.OWNER_WALLET = data.owner_wallet;
-        }
     } catch { /* оставляем статичные опции из HTML */ }
 }
 
 // ============================================================
-// Пользовательское соглашение
+// v5.0: Пользовательское соглашение
 // ============================================================
 const TERMS_VERSION = 'v5.0-2026-03-11';
 
@@ -1081,6 +1084,9 @@ function declineTerms() {
     window.location.href = 'https://google.com';
 }
 
+// ============================================================
+// handleInput — обновляет рекомендуемый уровень при вводе
+// ============================================================
 async function handleInput() {
     const question = document.getElementById('userInput')?.value?.trim();
     if (!question || question.length < 3) return;
@@ -1092,6 +1098,10 @@ async function handleInput() {
         if (el && data.level) el.textContent = data.level;
     } catch { /* silent */ }
 }
+
+// ============================================================
+// SETTINGS — closeSettings, saveSettings, loadSavedKeys
+// ============================================================
 
 function closeSettings() {
     const modal = document.getElementById('settingsModal');
@@ -1105,10 +1115,11 @@ async function saveSettings() {
     const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
+    // Сохраняем локально
     if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
-    if (ownerWallet)  { localStorage.setItem('brain_owner_wallet', ownerWallet); CONFIG.OWNER_WALLET = ownerWallet; }
 
+    // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
     if (apiKey && token) {
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/auth/keys/${provider}`, {
@@ -1131,6 +1142,7 @@ async function saveSettings() {
             showNotification('❌ Нет связи с сервером', 'error');
         }
     } else if (apiKey) {
+        // Без авторизации — только в sessionStorage
         sessionStorage.setItem('brain_api_key', apiKey);
         CONFIG.API_KEY = apiKey;
         showNotification('✅ Ключ сохранён локально (подключите кошелёк для сохранения на сервер)', 'info');
@@ -1184,14 +1196,20 @@ async function deleteKey(provider) {
     }
 }
 
+// Показать текущие значения при открытии настроек
 openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
+    // Заполнить поля текущими значениями
     const su = document.getElementById('serverUrl');
     if (su) su.value = CONFIG.API_URL || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
+
+// ============================================================
+// THEME — toggleTheme
+// ============================================================
 
 function toggleTheme() {
     const html = document.documentElement;
@@ -1202,9 +1220,14 @@ function toggleTheme() {
     CONFIG.THEME = next;
 }
 
+// ============================================================
+// HISTORY — clearHistory
+// ============================================================
+
 function clearHistory() {
     const messages = elements.messages;
     if (!messages) return;
+    // Оставляем только welcome-message
     const welcome = document.getElementById('welcomeMessage');
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
@@ -1215,6 +1238,10 @@ function clearHistory() {
     sessionStorage.removeItem('brain_history');
     showNotification('🗑️ История очищена', 'info');
 }
+
+// ============================================================
+// SUGGEST — applySuggestedLevel
+// ============================================================
 
 function applySuggestedLevel() {
     const suggestEl = document.getElementById('suggestLevel');
@@ -1228,8 +1255,9 @@ function applySuggestedLevel() {
 }
 
 // ============================================================
-// WEBSOCKET
+// WEBSOCKET — подключение и live-обновления кристаллов
 // ============================================================
+
 let ws = null;
 let wsReconnectTimer = null;
 let wsReconnectAttempts = 0;
@@ -1253,9 +1281,11 @@ function connectWebSocket() {
     ws.onopen = () => {
         wsReconnectAttempts = 0;
         setWsIndicator('connected');
+        // Авторизуемся если есть токен
         if (token) {
             ws.send(JSON.stringify({ type: 'auth', token }));
         }
+        // Подписываемся на обновления кристаллов
         ws.send(JSON.stringify({ type: 'subscribe', channel: 'crystals' }));
     };
 
@@ -1263,13 +1293,14 @@ function connectWebSocket() {
         try {
             const msg = JSON.parse(event.data);
             handleWsMessage(msg);
-        } catch { /* ignore */ }
+        } catch { /* ignore malformed */ }
     };
 
     ws.onerror = () => setWsIndicator('error');
 
     ws.onclose = () => {
         setWsIndicator('error');
+        // Реконнект с экспоненциальной задержкой, макс 30с
         const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
         wsReconnectAttempts++;
         wsReconnectTimer = setTimeout(connectWebSocket, delay);
@@ -1278,6 +1309,9 @@ function connectWebSocket() {
 
 function handleWsMessage(msg) {
     switch (msg.type) {
+        case 'welcome':
+            // Сервер приветствует — ничего
+            break;
         case 'auth':
             if (msg.status === 'success' && msg.role === 'architect') {
                 isArchitect = true;
@@ -1285,9 +1319,11 @@ function handleWsMessage(msg) {
             }
             break;
         case 'crystal:update':
+            // Живое обновление — перезагружаем список
             loadCrystals();
             break;
         case 'pong':
+            // heartbeat OK
             break;
         case 'error':
             console.warn('WS error:', msg.message);
@@ -1309,25 +1345,31 @@ function setWsIndicator(state) {
     el.className = `ws-indicator ${s.cls}`;
 }
 
+// WS heartbeat — пингуем каждые 25с чтобы соединение не закрылось
 setInterval(() => {
     if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));
     }
 }, 25000);
 
+// ============================================================
+// INIT — патч: добавить WS + openSettings после загрузки
+// ============================================================
 const _origInit = init;
 init = async function() {
     await _origInit();
+    // Запускаем WS если есть API_URL
     if (CONFIG.API_URL) {
         connectWebSocket();
     }
 };
 
 // ============================================================
-// КАБИНЕТ АРХИТЕКТОРА
+// 👑 КАБИНЕТ АРХИТЕКТОРА
 // ============================================================
+
 function openAdminPanel() {
-    if (!token) return showNotification('Необходима авторизация через MetaMask', 'warning');
+    if (!token) return showNotification(currentLang === 'ru' ? 'Необходима авторизация через MetaMask' : 'MetaMask authorization required', 'warning');
     document.getElementById('adminPanel').style.display = 'flex';
     showAdminTab('stats');
 }
@@ -1370,6 +1412,7 @@ async function adminFetch(path, opts = {}) {
     return res.json();
 }
 
+// ─── СТАТИСТИКА ──────────────────────────────────────────────
 async function loadAdminStats() {
     try {
         const d = await adminFetch('/api/admin/stats');
@@ -1433,6 +1476,7 @@ async function loadAdminStats() {
     }
 }
 
+// ─── ПОЛЬЗОВАТЕЛИ ────────────────────────────────────────────
 async function loadAdminUsers(search = '', blocked = '') {
     try {
         const qs = new URLSearchParams({ limit: 100, ...(search && {search}), ...(blocked && {blocked}) });
@@ -1453,7 +1497,7 @@ async function loadAdminUsers(search = '', blocked = '') {
             <thead><tr>
                 <th>ID</th><th>Кошелёк</th><th>Роль</th><th>Запросов</th>
                 <th>Кристаллов</th><th>Потрачено</th><th>Последний вход</th><th>Действия</th>
-             </thead>
+            </tr></thead>
             <tbody>${d.users.map(u => `
             <tr class="${u.is_blocked ? 'row-blocked' : ''}">
                 <td>${u.id}</td>
@@ -1470,11 +1514,10 @@ async function loadAdminUsers(search = '', blocked = '') {
                     <button class="admin-btn-sm" onclick="adminToggleRole(${u.id}, ${!u.is_architect})">
                         ${u.is_architect ? '👤 Понизить' : '👑 Повысить'}
                     </button>
-                 </td>
-             </tr>`).join('')}
+                </td>
+            </tr>`).join('')}
             </tbody>
-         </table>
-        </div>`;
+        </table></div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1496,6 +1539,7 @@ async function adminToggleRole(userId, is_architect) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
+// ─── КРИСТАЛЛЫ ───────────────────────────────────────────────
 async function loadAdminCrystals(status = '', global_only = false) {
     try {
         const qs = new URLSearchParams({ limit: 100, ...(status && {status}), ...(global_only && {is_global: 'true'}) });
@@ -1536,11 +1580,10 @@ async function loadAdminCrystals(status = '', global_only = false) {
                         ${c.is_global ? '📌 Убрать' : '🌐 Глоб.'}
                     </button>
                     <button class="admin-btn-sm danger" onclick="adminDeleteCrystal(${c.id})">🗑️</button>
-                 </td>
-             </tr>`).join('')}
+                </td>
+            </tr>`).join('')}
             </tbody>
-         </table>
-        </div>`;
+        </table></div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1569,6 +1612,7 @@ async function adminDeleteCrystal(id) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
+// ─── АТАКИ ───────────────────────────────────────────────────
 async function loadAdminAttacks() {
     try {
         const d = await adminFetch('/api/admin/attacks?hours=24');
@@ -1586,11 +1630,10 @@ async function loadAdminAttacks() {
                 <td>${new Date(ip.last_seen).toLocaleTimeString()}</td>
                 <td>
                     <button class="admin-btn-sm danger" onclick="adminBlockIp('${ip.ip}')">🚫 Блок</button>
-                 </td>
-             </tr>`).join('')}
+                </td>
+            </tr>`).join('')}
             </tbody>
-         </table>
-        </div>
+        </table></div>
 
         <div class="admin-section-title" style="margin-top:16px">🔒 Заблокированные IP</div>
         <div class="admin-table-wrap">
@@ -1602,14 +1645,30 @@ async function loadAdminAttacks() {
                 <td>${b.reason || '—'}</td>
                 <td>${b.expires_at ? new Date(b.expires_at).toLocaleDateString() : '∞'}</td>
                 <td><button class="admin-btn-sm ok" onclick="adminUnblockIp('${b.ip}')">✅ Снять</button></td>
-             </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;opacity:.5">Нет заблокированных IP</td></tr>'}
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;opacity:.5">Нет заблокированных IP</td></tr>'}
             </tbody>
-         </table>
-        </div>
+        </table></div>
 
         <div style="margin-top:12px">
             <button class="admin-btn-sm" onclick="adminBlockIp()">➕ Заблокировать IP вручную</button>
+        </div>
+
+        <div class="admin-section-title" style="margin-top:20px">🛡️ Режим фильтрации запросов</div>
+        <div class="admin-card" style="margin-top:8px" id="filterModeCard">
+            <div class="admin-card-title">Текущий режим</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="filterModeBtns">
+                <button class="admin-btn-sm ok" onclick="adminSetFilterMode('open')">🟢 Открытый</button>
+                <button class="admin-btn-sm warn" onclick="adminSetFilterMode('science')">🔬 Научный</button>
+                <button class="admin-btn-sm danger" onclick="adminSetFilterMode('strict')">🔴 Строгий</button>
+            </div>
+            <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:10px;line-height:1.6">
+                🟢 <b>Открытый</b> — все запросы проходят без фильтрации<br>
+                🔬 <b>Научный</b> — чувствительные темы → научный ответ<br>
+                🔴 <b>Строгий</b> — блокировка подозрительных запросов
+            </div>
+            <div id="filterModeStatus" style="margin-top:10px;font-size:12px;color:#fbbf24"></div>
         </div>`;
+        loadFilterMode();
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1636,6 +1695,7 @@ async function adminUnblockIp(ip) {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
+// ─── ПРОМПТЫ ─────────────────────────────────────────────────
 async function loadAdminPrompts() {
     try {
         const d = await adminFetch('/api/admin/prompts');
@@ -1683,6 +1743,7 @@ async function adminCreatePrompt() {
     } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
+// ─── ЭКОНОМИКА ───────────────────────────────────────────────
 async function loadAdminEconomy() {
     try {
         const [payments, masterKey] = await Promise.all([
@@ -1724,15 +1785,15 @@ async function loadAdminEconomy() {
                 <td>${p.level}</td>
                 <td><span class="status-badge ${p.status}">${p.status}</span></td>
                 <td>${new Date(p.created_at).toLocaleDateString()}</td>
-             </tr>`).join('')}
+            </tr>`).join('')}
             </tbody>
-         </table>
-        </div>`;
+        </table></div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
 }
 
+// ─── УРОВНИ (вкладка кабинета архитектора) ───────────────────
 async function loadAdminLevels() {
     try {
         const d = await adminFetch('/api/admin/levels');
@@ -1745,13 +1806,51 @@ async function loadAdminLevels() {
         </div>
         <div class="admin-table-wrap">
         <table class="admin-table levels-table">
-            <thead><tr><th>Уровень</th><th>Описание</th><th>Цена ($)</th><th>Токены</th><th>Лимит/день</th><th>Обновлён</th><th></th></tr></thead>
+            <thead><tr>
+                <th>Уровень</th>
+                <th>Описание</th>
+                <th>Цена ($)</th>
+                <th>Токены</th>
+                <th>Лимит/день</th>
+                <th>Обновлён</th>
+                <th></th>
+            </tr></thead>
             <tbody>${d.levels.map(l => `
             <tr id="level-row-${l.level}">
-                <td><b class="level-badge level-${l.level}">${l.level}</b>\\n                 <td>\\n                    <input class="admin-input level-input" id="desc_${l.level}"\\n                        value="${l.description || ''}" placeholder="Описание">\\n                 </td>\\n                 <td>\\n                    <input class="admin-input level-input level-num" id="price_${l.level}"\\n                        type="number" min="0" step="0.01"\\n                        value="${parseFloat(l.price).toFixed(2)}"\\n                        placeholder="0.00">\\n                 </td>\\n                 <td>\\n                    <input class="admin-input level-input level-num" id="tokens_${l.level}"\\n                        type="number" min="100" step="100"\\n                        value="${l.tokens}"\\n                        placeholder="300">\\n                 </td>\\n                 <td>\\n                    <input class="admin-input level-input level-num" id="limit_${l.level}"\\n                        type="number" min="0" step="1"\\n                        value="${l.daily_limit}"\\n                        placeholder="0 = ∞">\\n                 </td>\\n                <td style="font-size:11px;opacity:.5">\\n                    ${l.updated_at ? new Date(l.updated_at).toLocaleDateString() : '—'}\\n                 </td>\\n                 <td>\\n                    <button class="admin-btn-sm ok" onclick="adminSaveLevel('${l.level}')">\\n                        💾 Сохранить\\n                    </button>\\n                 </td>\\n             </tr>`).join('')}
+                <td><b class="level-badge level-${l.level}">${l.level}</b></td>
+                <td>
+                    <input class="admin-input level-input" id="desc_${l.level}"
+                        value="${l.description || ''}" placeholder="Описание">
+                </td>
+                <td>
+                    <input class="admin-input level-input level-num" id="price_${l.level}"
+                        type="number" min="0" step="0.01"
+                        value="${parseFloat(l.price).toFixed(2)}"
+                        placeholder="0.00">
+                </td>
+                <td>
+                    <input class="admin-input level-input level-num" id="tokens_${l.level}"
+                        type="number" min="100" step="100"
+                        value="${l.tokens}"
+                        placeholder="300">
+                </td>
+                <td>
+                    <input class="admin-input level-input level-num" id="limit_${l.level}"
+                        type="number" min="0" step="1"
+                        value="${l.daily_limit}"
+                        placeholder="0 = ∞">
+                </td>
+                <td style="font-size:11px;opacity:.5">
+                    ${l.updated_at ? new Date(l.updated_at).toLocaleDateString() : '—'}
+                </td>
+                <td>
+                    <button class="admin-btn-sm ok" onclick="adminSaveLevel('${l.level}')">
+                        💾 Сохранить
+                    </button>
+                </td>
+            </tr>`).join('')}
             </tbody>
-         </table>
-        </div>
+        </table></div>
         <div class="levels-info">
             <div class="levels-info-row">
                 <span>🆓 Бесплатный уровень</span>
@@ -1796,6 +1895,7 @@ async function adminSaveLevel(level) {
         });
 
         if (row) row.style.opacity = '1';
+        // Обновляем селект уровней в основном интерфейсе
         updateLevelSelect(level, parseFloat(price));
     } catch(e) {
         alert('Ошибка: ' + e.message);
@@ -1804,6 +1904,7 @@ async function adminSaveLevel(level) {
     }
 }
 
+// Обновляем подписи в главном селекте уровней после изменения цены
 function updateLevelSelect(level, price) {
     const opt = document.querySelector(`#levelSelect option[value="${level}"]`);
     if (!opt) return;
@@ -1812,11 +1913,12 @@ function updateLevelSelect(level, price) {
 }
 
 // ============================================================
-// ЛИЧНЫЙ КАБИНЕТ
+// 👤 ЛИЧНЫЙ КАБИНЕТ ПОЛЬЗОВАТЕЛЯ
 // ============================================================
+
 async function openProfile() {
     if (!token) {
-        showNotification('Подключите MetaMask для входа', 'info');
+        showNotification(currentLang === 'ru' ? 'Подключите MetaMask для входа' : 'Connect MetaMask to sign in', 'info');
         await connectWallet();
         return;
     }
@@ -1841,6 +1943,7 @@ async function loadProfile() {
         const p = d.profile;
         const c = d.crystals;
 
+        // Дневные лимиты
         const limitsHtml = Object.entries(d.limits || {}).map(([lvl, l]) => {
             const pct = Math.round(l.used / l.limit * 100);
             const color = pct >= 100 ? '#f87171' : pct >= 70 ? '#fbbf24' : '#4ade80';
@@ -1854,6 +1957,7 @@ async function loadProfile() {
             </div>`;
         }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
 
+        // История платежей
         const paymentsHtml = d.payments.length
             ? d.payments.map(p => `
             <div class="profile-payment-row">
@@ -1870,6 +1974,7 @@ async function loadProfile() {
         body.innerHTML = `
         <div class="profile-grid">
 
+            <!-- Профиль -->
             <div class="profile-card">
                 <div class="profile-wallet">
                     <span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span>
@@ -1899,6 +2004,7 @@ async function loadProfile() {
                 </div>
             </div>
 
+            <!-- Кристаллы -->
             <div class="profile-card">
                 <div class="profile-card-title">💎 Мои кристаллы</div>
                 <div class="profile-crystals-grid">
@@ -1929,12 +2035,14 @@ async function loadProfile() {
                 </div>
             </div>
 
+            <!-- Дневные лимиты -->
             <div class="profile-card">
                 <div class="profile-card-title">📊 Лимиты сегодня</div>
                 <div class="profile-limits">${limitsHtml}</div>
                 <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
             </div>
 
+            <!-- История платежей -->
             <div class="profile-card profile-card-wide">
                 <div class="profile-card-title">💰 История платежей</div>
                 <div class="profile-payments">${paymentsHtml}</div>
@@ -1947,6 +2055,41 @@ async function loadProfile() {
     }
 }
 
+
+// ─── РЕЖИМ ФИЛЬТРАЦИИ ────────────────────────────────────────
+async function adminSetFilterMode(mode) {
+    const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+    if (!confirm(`Установить режим фильтрации: ${labels[mode]}?`)) return;
+    try {
+        await adminFetch('/api/admin/filter-mode', { method: 'POST', body: { mode } });
+        const status = document.getElementById('filterModeStatus');
+        if (status) status.textContent = `✅ Активный режим: ${labels[mode]}`;
+        showNotification(`✅ Режим фильтрации: ${labels[mode]}`, 'success');
+        highlightFilterMode(mode);
+    } catch(e) {
+        showNotification('❌ Ошибка: ' + e.message, 'error');
+    }
+}
+
+async function loadFilterMode() {
+    try {
+        const d = await adminFetch('/api/admin/filter-mode');
+        const status = document.getElementById('filterModeStatus');
+        const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+        if (status) status.textContent = `Активный режим: ${labels[d.mode] || d.mode}`;
+        highlightFilterMode(d.mode);
+    } catch {}
+}
+
+function highlightFilterMode(mode) {
+    const btns = document.querySelectorAll('#filterModeBtns .admin-btn-sm');
+    const modes = ['open', 'science', 'strict'];
+    btns.forEach((btn, i) => {
+        btn.style.opacity = modes[i] === mode ? '1' : '0.4';
+        btn.style.fontWeight = modes[i] === mode ? 'bold' : 'normal';
+    });
+}
+
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => showNotification('📋 Скопировано', 'success'));
+    navigator.clipboard.writeText(text).then(() => showNotification(currentLang === 'ru' ? '📋 Скопировано' : '📋 Copied', 'success'));
 }
