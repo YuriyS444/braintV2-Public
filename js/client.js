@@ -1,5 +1,5 @@
 const CONFIG = {
-    API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || (typeof window.__BRAIN_API__ !== 'undefined' ? window.__BRAIN_API__ : ''),
+    API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
     ARCHITECT_KEY: sessionStorage.getItem('brain_architect_key') || '',
     OWNER_WALLET: '', // загружается с сервера автоматически
@@ -77,18 +77,11 @@ async function init() {
         await verifyToken();
     }
     
-    // FIX: loadCrystals вызывается после verifyToken — токен уже проверен/сброшен
     await loadCrystals();
     
     elements.userInput.addEventListener('input', debounce(handleInput, 500));
     elements.userInput.addEventListener('keydown', handleKeyDown);
     elements.searchInput.addEventListener('input', handleSearch);
-    
-    // FIX: если токен есть — обновляем кристаллы повторно через 1с
-    // (страховка на случай если WS ещё не подключился)
-    if (token) {
-        setTimeout(() => loadCrystals(), 1000);
-    }
     
     setInterval(updateThreatIndicator, 5000);
 }
@@ -359,7 +352,7 @@ function importCrystals() {
 async function sendMessage() {
     const question = elements.userInput.value.trim();
     if (!question) return;
-    
+
     if (!CONFIG.API_URL) {
         openSettings();
         return;
@@ -372,43 +365,49 @@ async function sendMessage() {
     }
     const useStream = elements.streamToggle.checked;
 
-    // FIX: получаем attachedFile из index.html (он объявлен там как локальная переменная)
-    // Читаем через window или через DOM — берём из глобального скоупа index.html
-    const currentFile = (typeof attachedFile !== 'undefined' ? attachedFile : null)
-        || (typeof window._attachedFile !== 'undefined' ? window._attachedFile : null);
-
     elements.userInput.value = '';
     autoResize(elements.userInput);
-    
-    // FIX: отображаем файл в чате если прикреплён
-    addUserMessage(question, currentFile);
+
+    addUserMessage(question);
     addTypingIndicator();
-    
+
     if (elements.progressBar) {
         elements.progressBar.style.display = 'block';
     }
-    
+
     elements.sendBtn.style.display = 'none';
     elements.stopBtn.style.display = 'flex';
-    
+
     abortController = new AbortController();
-    
+
     try {
         let txHash = null;
-        // Получаем актуальный конфиг уровней из API (цены управляются архитектором)
-        let levelConfig = {};
+        let price = 0;
+        let ownerWallet = CONFIG.OWNER_WALLET;
+
+        // Получаем цену и кошелёк с сервера
         try {
             const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
             const cfgData = await cfgRes.json();
-            levelConfig = cfgData.levels || {};
-        } catch { /* fallback — используем дефолтные цены */ }
+            const levels = cfgData.levels || {};
+            price = parseFloat(levels[level]?.price || 0);
+            if (cfgData.owner_wallet) {
+                ownerWallet = cfgData.owner_wallet;
+                CONFIG.OWNER_WALLET = ownerWallet;
+            }
+        } catch { /* fallback */ }
 
-        const cfg = levelConfig[level] || {};
-        const price = parseFloat(cfg.price || 0);
-
-        // Платим только если цена > 0 и пользователь не архитектор
+        // Если нужна оплата
         if (price > 0 && !isArchitect) {
-            txHash = await processPayment(level, price);
+            if (!ownerWallet) {
+                showNotification('❌ Адрес получателя не загружен', 'error');
+                removeTypingIndicator();
+                if (elements.progressBar) elements.progressBar.style.display = 'none';
+                elements.sendBtn.style.display = 'flex';
+                elements.stopBtn.style.display = 'none';
+                return;
+            }
+            txHash = await processPayment(level, price, ownerWallet);
             if (!txHash) {
                 removeTypingIndicator();
                 if (elements.progressBar) elements.progressBar.style.display = 'none';
@@ -417,26 +416,20 @@ async function sendMessage() {
                 return;
             }
         }
-        
+
+        // Рекомендация уровня
         try {
             const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(question)}`);
             const suggestData = await suggestRes.json();
             elements.suggestLevel.textContent = suggestData.level;
-        } catch (error) {
-        }
-        
+        } catch { /* silent */ }
+
         if (useStream) {
-            await sendStreamMessage(question, level, txHash, currentFile);
+            await sendStreamMessage(question, level, txHash);
         } else {
-            await sendNormalMessage(question, level, txHash, currentFile);
+            await sendNormalMessage(question, level, txHash);
         }
 
-        // FIX: очищаем файл после отправки
-        if (currentFile) {
-            if (typeof removeAttachedFile === 'function') removeAttachedFile();
-            if (typeof window._attachedFile !== 'undefined') window._attachedFile = null;
-        }
-        
     } catch (error) {
         if (error.name !== 'AbortError') {
             removeTypingIndicator();
@@ -452,24 +445,7 @@ async function sendMessage() {
     }
 }
 
-async function sendNormalMessage(question, level, txHash, file) {
-    // FIX: если прикреплён файл — конвертируем в base64 и добавляем в запрос
-    let fileData = null;
-    if (file) {
-        try {
-            fileData = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve({
-                    name: file.name,
-                    type: file.type,
-                    data: reader.result.split(',')[1]
-                });
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        } catch { /* отправляем без файла если ошибка */ }
-    }
-
+async function sendNormalMessage(question, level, txHash) {
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
         signal: abortController.signal,
@@ -483,66 +459,38 @@ async function sendNormalMessage(question, level, txHash, file) {
             level,
             provider: CONFIG.PROVIDER,
             tx_hash: txHash,
-            history: history.slice(-10),
-            ...(fileData && { file: fileData })
+            history: history.slice(-10)
         })
     });
-    
+
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
-
-        // Лимит исчерпан
+        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
         if (response.status === 429) {
             const msg = error.limit
-                ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/day.\nResets at midnight UTC.`)
+                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.`
                 : error.error;
             throw new Error(msg);
         }
-
-        // Требуется оплата (не должно случаться т.к. мы уже платим, но на всякий случай)
-        if (response.status === 402) {
-            throw new Error(`Требуется оплата: $${error.price} для уровня ${error.level}`);
-        }
-
         throw new Error(error.error || 'Request failed');
     }
-    
+
     const data = await response.json();
     removeTypingIndicator();
     addAssistantMessage(data.answer, data.crystal, data.level, data.suggestedLevel);
-    
+
     if (data.crystal) {
-        crystals.unshift({
-            id: Date.now(),
-            ...data.crystal
-        });
+        crystals.unshift({ id: Date.now(), ...data.crystal });
         renderCrystals();
         updateStats();
     }
-    
+
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
 }
 
-async function sendStreamMessage(question, level, txHash, file) {
-    // FIX: если прикреплён файл — конвертируем в base64
-    let fileData = null;
-    if (file) {
-        try {
-            fileData = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve({
-                    name: file.name,
-                    type: file.type,
-                    data: reader.result.split(',')[1]
-                });
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        } catch { /* отправляем без файла */ }
-    }
-
+async function sendStreamMessage(question, level, txHash) {
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
         signal: abortController.signal,
@@ -557,13 +505,19 @@ async function sendStreamMessage(question, level, txHash, file) {
             provider: CONFIG.PROVIDER,
             tx_hash: txHash,
             history: history.slice(-10),
-            stream: true,
-            ...(fileData && { file: fileData })
+            stream: true
         })
     });
-    
+
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
+        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
+        if (response.status === 429) {
+            const msg = error.limit
+                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.`
+                : error.error;
+            throw new Error(msg);
+        }
         throw new Error(error.error || 'Request failed');
     }
     
@@ -635,7 +589,7 @@ function stopGeneration() {
     }
 }
 
-async function processPayment(level, price) {
+async function processPayment(level, price, ownerWallet) {
     if (!price || price <= 0) return null;
 
     if (!wallet) {
@@ -643,64 +597,41 @@ async function processPayment(level, price) {
         if (!wallet) return null;
     }
 
-    // Если кошелёк получателя не загружен — загружаем сейчас
-    if (!CONFIG.OWNER_WALLET) {
-        try {
-            const res = await fetch(`${CONFIG.API_URL}/api/levels`);
-            const data = await res.json();
-            if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
-        } catch {}
-    }
-
-    if (!CONFIG.OWNER_WALLET) {
-        showNotification('❌ Ошибка: адрес получателя не загружен', 'error');
-        return null;
-    }
-
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
         `Сумма: ${price} USDC\n` +
         `Токен: USDC (Polygon)\n` +
-        `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
+        `Получатель: ${ownerWallet}\n\n` +
         `После оплаты ответ будет получен автоматически.\nПродолжить?`
     );
     if (!confirmed) return null;
 
     try {
-        // Переключаемся на Polygon перед оплатой
+        // Переключаемся на Polygon
         try {
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x89' }] // Polygon Mainnet
+                params: [{ chainId: '0x89' }]
             });
         } catch (switchError) {
             if (switchError.code === 4902) {
                 await window.ethereum.request({
                     method: 'wallet_addEthereumChain',
-                    params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+                    params: [{
+                        chainId: '0x89',
+                        chainName: 'Polygon',
+                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                        rpcUrls: ['https://polygon-rpc.com'],
+                        blockExplorerUrls: ['https://polygonscan.com']
+                    }]
                 });
             }
         }
 
-        // Убеждаемся что кошелёк получателя загружен
-        if (!CONFIG.OWNER_WALLET) {
-            try {
-                const res = await fetch(`${CONFIG.API_URL}/api/levels`);
-                const data = await res.json();
-                if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
-            } catch {}
-        }
-        if (!CONFIG.OWNER_WALLET) {
-            showNotification('❌ Кошелёк получателя не загружен. Попробуйте позже.', 'error');
-            return null;
-        }
-
-        // USDC на Polygon (6 decimals)
         const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.floor(price * 1e6); // USDC = 6 decimals
+        const usdcAmount = Math.floor(price * 1e6);
         const amountHex = usdcAmount.toString(16).padStart(64, '0');
-        const recipientHex = CONFIG.OWNER_WALLET.slice(2).padStart(64, '0');
-        // transfer(address,uint256) selector = 0xa9059cbb
+        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
         const data = '0xa9059cbb' + recipientHex + amountHex;
 
         const txHash = await window.ethereum.request({
@@ -721,18 +652,16 @@ async function processPayment(level, price) {
                     showNotification('✅ Платёж подтверждён', 'success');
                     return txHash;
                 }
-                // Критическая ошибка — не продолжаем
                 if (verifyData.reason && 
                     !verifyData.reason.includes('not found') && 
-                    !verifyData.reason.includes('pending')) {
+                    !verifyData.reason.includes('pending') &&
+                    !verifyData.reason.includes('Waiting')) {
                     showNotification('⚠️ ' + verifyData.reason, 'warning');
-                    // Всё равно возвращаем txHash — сервер сам решит
                     return txHash;
                 }
             } catch { /* продолжаем ждать */ }
         }
 
-        // Таймаут — возвращаем txHash, пусть сервер проверит
         showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
         return txHash;
 
@@ -746,28 +675,15 @@ async function processPayment(level, price) {
     }
 }
 
-function addUserMessage(text, file) {
+function addUserMessage(text) {
     removeWelcomeMessage();
-
-    // FIX: показываем прикреплённый файл в пузыре
-    let fileHtml = '';
-    if (file) {
-        const icon = file.type.startsWith('image/') ? '🖼️'
-            : file.type === 'application/pdf' ? '📄'
-            : file.type.startsWith('audio/') ? '🎵'
-            : file.type.startsWith('video/') ? '🎬' : '📎';
-        const sizeKb = (file.size / 1024).toFixed(1);
-        fileHtml = `<div class="message-attachment" style="margin-top:6px;font-size:12px;opacity:.8;border-top:1px solid rgba(255,255,255,.15);padding-top:6px;">
-            ${icon} <b>${escapeHtml(file.name)}</b> <span style="opacity:.6">${sizeKb} KB</span>
-        </div>`;
-    }
-
+    
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message user';
     messageDiv.innerHTML = `
         <div class="message-avatar">👤</div>
         <div class="message-content">
-            <div class="message-bubble">${escapeHtml(text)}${fileHtml}</div>
+            <div class="message-bubble">${escapeHtml(text)}</div>
         </div>
     `;
     
