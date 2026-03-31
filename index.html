@@ -11,6 +11,25 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BRAIN T₀">
+    <style>
+        /* Скрываем URL сервера в боковой панели */
+        .sidebar .server-url,
+        .sidebar .api-url,
+        .sidebar-url,
+        [class*="server-url"],
+        [class*="api-url"] {
+            display: none !important;
+        }
+        .sidebar a[href*="railway"],
+        .sidebar a[href*="up.railway"] {
+            display: none !important;
+        }
+        /* Скрываем любые элементы с текстом, похожим на URL */
+        .sidebar *:has(> :contains("railway.app")),
+        .sidebar *:contains("railway.app") {
+            display: none !important;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -143,7 +162,7 @@
                     <span class="suggest-link" onclick="applySuggestedLevel()" data-i18n="apply">(применить)</span>
                     <span class="input-hint" data-i18n="hint_enter">· Enter — отправить</span>
                     <span class="input-hint" data-i18n="hint_shift">· Shift+Enter — перенос</span>
-                    <label class="stream-toggle">
+                    <label class="stream-toggle" style="display: none;">
                         <input type="checkbox" id="streamToggle" checked> Stream
                     </label>
                 </div>
@@ -180,7 +199,7 @@
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="settings-group">
+                <div class="settings-group" style="display: none;">
                     <label data-i18n="label_server">🌐 Сервер API</label>
                     <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
                 </div>
