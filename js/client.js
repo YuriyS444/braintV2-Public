@@ -398,6 +398,11 @@ async function sendMessage() {
             }
         } catch { /* fallback */ }
 
+        // Уведомление о файле
+        if (window.attachedFile) {
+            showNotification(`📎 Отправка файла: ${window.attachedFile.name}...`, 'info');
+        }
+
         // Если нужна оплата
         if (price > 0 && !isArchitect) {
             if (!ownerWallet) {
@@ -470,7 +475,9 @@ async function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-            const base64 = reader.result.split(',')[1];
+            const result = reader.result;
+            // Убеждаемся что data — чистый base64 без data:...;base64, префикса
+            const base64 = result.includes(',') ? result.split(',')[1] : result;
             resolve({ name: file.name, type: file.type, data: base64, size: file.size });
         };
         reader.onerror = reject;
