@@ -18,9 +18,6 @@ let abortController = null;
 let attackCount = 0;
 let searchTimeout = null;
 
-window.attachedFiles = window.attachedFiles || [];
-window.attachedFile = window.attachedFile || null;
-
 const elements = {
     themeToggle: document.querySelector('.theme-toggle'),
     threatIndicator: document.getElementById('threatIndicator'),
@@ -352,12 +349,20 @@ function importCrystals() {
     input.click();
 }
 
+
 async function sendMessage() {
     const question = elements.userInput.value.trim();
-    if (!question) return;
+    const files = getAttachedFiles();
+    const provider = getSelectedProvider();
+
+    if (!question && !files.length) return;
 
     if (!CONFIG.API_URL) {
         openSettings();
+        return;
+    }
+
+    if (!validateAttachedFilesForProvider(files, provider)) {
         return;
     }
 
@@ -366,22 +371,19 @@ async function sendMessage() {
         await login();
         if (!token) return;
     }
+
     const streamToggleEl = document.getElementById('streamToggle');
-    const useStream = streamToggleEl && !streamToggleEl.closest('[style*="display: none"]') && streamToggleEl.checked;
+    const useStream = !!(streamToggleEl && !streamToggleEl.closest('[style*="display: none"]') && streamToggleEl.checked);
 
     elements.userInput.value = '';
     autoResize(elements.userInput);
 
-    addUserMessage(question);
+    addUserMessage(question || (files.length === 1 ? `📎 ${files[0].name}` : `📎 Файлов: ${files.length}`));
     addTypingIndicator();
 
-    if (elements.progressBar) {
-        elements.progressBar.style.display = 'block';
-    }
-
+    if (elements.progressBar) elements.progressBar.style.display = 'block';
     elements.sendBtn.style.display = 'none';
     elements.stopBtn.style.display = 'flex';
-
     abortController = new AbortController();
 
     try {
@@ -389,7 +391,6 @@ async function sendMessage() {
         let price = 0;
         let ownerWallet = CONFIG.OWNER_WALLET;
 
-        // Получаем цену и кошелёк с сервера
         try {
             const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
             const cfgData = await cfgRes.json();
@@ -399,55 +400,46 @@ async function sendMessage() {
                 ownerWallet = cfgData.owner_wallet;
                 CONFIG.OWNER_WALLET = ownerWallet;
             }
-        } catch { /* fallback */ }
+        } catch {}
 
-        // Уведомление о файле
-        if (window.attachedFile) {
-            showNotification(`📎 Отправка файла: ${window.attachedFile.name}...`, 'info');
+        if (files.length) {
+            showNotification(files.length === 1 ? `📎 Отправка файла: ${files[0].name}...` : `📎 Отправка файлов: ${files.length}...`, 'info');
         }
 
-        // Если нужна оплата
         if (price > 0 && !isArchitect) {
             if (!ownerWallet) {
                 showNotification('❌ Адрес получателя не загружен', 'error');
                 removeTypingIndicator();
-                if (elements.progressBar) elements.progressBar.style.display = 'none';
-                elements.sendBtn.style.display = 'flex';
-                elements.stopBtn.style.display = 'none';
                 return;
             }
             txHash = await processPayment(level, price, ownerWallet);
             if (!txHash) {
                 removeTypingIndicator();
-                if (elements.progressBar) elements.progressBar.style.display = 'none';
-                elements.sendBtn.style.display = 'flex';
-                elements.stopBtn.style.display = 'none';
                 return;
             }
         }
 
-        // Рекомендация уровня
         try {
-            const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(question)}`);
+            const suggestQuery = question || 'Анализ прикреплённых файлов';
+            const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(suggestQuery)}`);
             const suggestData = await suggestRes.json();
-            elements.suggestLevel.textContent = suggestData.level;
-        } catch { /* silent */ }
+            if (suggestData?.level) elements.suggestLevel.textContent = suggestData.level;
+        } catch {}
+
+        const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
 
         if (useStream) {
-            await sendStreamMessage(question, level, txHash);
+            await sendStreamMessage(effectiveQuestion, level, txHash);
         } else {
-            await sendNormalMessage(question, level, txHash);
+            await sendNormalMessage(effectiveQuestion, level, txHash);
         }
-
     } catch (error) {
         if (error.name !== 'AbortError') {
             removeTypingIndicator();
             addErrorMessage(error.message);
         }
     } finally {
-        if (elements.progressBar) {
-            elements.progressBar.style.display = 'none';
-        }
+        if (elements.progressBar) elements.progressBar.style.display = 'none';
         elements.sendBtn.style.display = 'flex';
         elements.stopBtn.style.display = 'none';
         abortController = null;
@@ -456,49 +448,64 @@ async function sendMessage() {
 
 
 
-// ── Конвертация файлов в base64 для отправки ─────────────────
+
+// ── Файлы: прод-режим ────────────────────────────────────────
+window.attachedFiles = window.attachedFiles || [];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
+
+function getAttachedFiles() {
+    return Array.isArray(window.attachedFiles) ? window.attachedFiles : [];
+}
 
 function getSelectedProvider() {
     return elements.providerSelect?.value || CONFIG.PROVIDER || 'auto';
 }
 
-function getAttachedFiles() {
-    if (Array.isArray(window.attachedFiles) && window.attachedFiles.length) {
-        return window.attachedFiles;
-    }
-    if (window.attachedFile) {
-        return [window.attachedFile];
-    }
-    return [];
-}
-
 function validateAttachedFilesForProvider(files, provider) {
     if (!files.length) return true;
 
+    const totalSize = files.reduce((sum, f) => sum + (f?.size || 0), 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+        showNotification(`❌ Общий размер файлов слишком большой: ${(totalSize / 1024 / 1024).toFixed(1)}MB. Максимум 20MB.`, 'error');
+        return false;
+    }
+
     for (const file of files) {
         if (file.size > MAX_FILE_SIZE) {
-            showNotification(`❌ Файл слишком большой: ${file.name}`, 'error');
+            showNotification(`❌ Файл слишком большой: ${file.name}. Максимум 5MB.`, 'error');
             return false;
         }
-
-        const isImage = file.type.startsWith('image/');
+        const isImage = String(file.type || '').startsWith('image/');
         const isPdf = file.type === 'application/pdf';
-
         if ((isImage || isPdf) && provider === 'deepseek') {
             showNotification('⚠️ Для изображений и PDF выберите Claude, GPT или Gemini', 'warning');
             return false;
         }
     }
-
     return true;
 }
+
+async function filesToPayload() {
+    const files = getAttachedFiles();
+    if (!files.length) return [];
+    const result = [];
+    for (const file of files) {
+        const f = await fileToBase64(file);
+        if (!f) throw new Error(`Ошибка обработки файла: ${file.name}`);
+        result.push(f);
+    }
+    return result;
+}
+
+// ── Конвертация файла в base64 для отправки ──────────────────
+
 
 async function fileToBase64(file) {
     if (!file) return null;
 
     if (file.size > MAX_FILE_SIZE) {
-        showNotification(`❌ Файл слишком большой: ${(file.size / 1024 / 1024).toFixed(1)}MB. Максимум 5MB.`, 'error');
+        showNotification(`❌ Файл слишком большой: ${(file.size/1024/1024).toFixed(1)}MB. Максимум 5MB.`, 'error');
         return null;
     }
 
@@ -507,32 +514,13 @@ async function fileToBase64(file) {
         reader.onload = () => {
             const result = reader.result || '';
             const base64 = String(result).includes(',') ? String(result).split(',')[1] : String(result);
-            resolve({
-                name: file.name,
-                type: file.type || 'application/octet-stream',
-                data: base64,
-                size: file.size
-            });
+            resolve({ name: file.name, type: file.type, data: base64, size: file.size });
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
 }
 
-async function filesToPayload() {
-    const files = getAttachedFiles();
-    if (!files.length) return [];
-
-    const out = [];
-    for (const file of files) {
-        const encoded = await fileToBase64(file);
-        if (!encoded) {
-            throw new Error(`Ошибка обработки файла: ${file.name}`);
-        }
-        out.push(encoded);
-    }
-    return out;
-}
 
 
 async function sendNormalMessage(question, level, txHash) {
@@ -583,9 +571,9 @@ async function sendNormalMessage(question, level, txHash) {
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-
     removeAttachedFile();
 }
+
 
 
 async function sendStreamMessage(question, level, txHash) {
@@ -626,7 +614,6 @@ async function sendStreamMessage(question, level, txHash) {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-
     let answer = '';
     let buffer = '';
 
@@ -638,53 +625,39 @@ async function sendStreamMessage(question, level, txHash) {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
             if (!line.startsWith('data:')) continue;
-
             const dataStr = line.slice(5).trim();
             if (!dataStr) continue;
-
             try {
                 const data = JSON.parse(dataStr);
-
                 if (data.chunk) {
                     answer += data.chunk;
                     updateAssistantMessage(messageId, answer);
                 }
-
                 if (data.done) {
                     if (data.crystal) {
-                        crystals.unshift({
-                            id: Date.now(),
-                            ...data.crystal
-                        });
+                        crystals.unshift({ id: Date.now(), ...data.crystal });
                         renderCrystals();
                         updateStats();
                     }
-
                     finalizeAssistantMessage(messageId, data.crystal);
                     history.push({ role: 'user', content: question });
                     history.push({ role: 'assistant', content: answer });
                     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
                     removeAttachedFile();
                 }
-
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-
+                if (data.error) throw new Error(data.error);
             } catch (e) {
-                if (e.message && !e.message.includes('JSON')) {
-                    throw e;
-                }
+                if (e.message && !e.message.includes('JSON')) throw e;
             }
         }
     }
 }
+
 
 function stopGeneration() {
     if (abortController) {
