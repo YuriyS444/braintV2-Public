@@ -12,22 +12,50 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BRAIN T₀">
     <style>
-        /* Скрываем URL сервера в боковой панели */
-        .sidebar .server-url,
-        .sidebar .api-url,
-        .sidebar-url,
-        [class*="server-url"],
-        [class*="api-url"] {
-            display: none !important;
+        .sidebar .server-url, .sidebar .api-url, .sidebar-url,
+        [class*="server-url"], [class*="api-url"] { display: none !important; }
+        .sidebar a[href*="railway"], .sidebar a[href*="up.railway"] { display: none !important; }
+
+        .sidebar-toggle {
+            display: flex !important;
+            background: var(--surface-2-dark);
+            border: 1px solid var(--border-dark);
+            border-radius: 6px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 8px;
+            align-items: center;
+            justify-content: center;
         }
-        .sidebar a[href*="railway"],
-        .sidebar a[href*="up.railway"] {
-            display: none !important;
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 60px;
+            bottom: 0;
+            transform: translateX(-100%);
+            transition: transform 0.2s ease;
+            z-index: 1000;
+            width: 280px;
+            background: var(--surface-dark);
+            border-right: 1px solid var(--border-dark);
         }
-        /* Скрываем любые элементы с текстом, похожим на URL */
-        .sidebar *:has(> :contains("railway.app")),
-        .sidebar *:contains("railway.app") {
-            display: none !important;
+        .sidebar.show { transform: translateX(0); }
+
+        .sidebar-overlay {
+            position: fixed;
+            top: 60px; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            z-index: 999;
+            display: none;
+        }
+        .sidebar-overlay.show { display: block; }
+
+        @media (min-width: 769px) {
+            .sidebar-toggle { display: flex !important; }
+            .main-container { margin-left: 0; }
         }
     </style>
 </head>
@@ -40,26 +68,24 @@
                 <span class="logo-version">T₀ v5.0</span>
             </div>
         </div>
-        
-        <div class="header-controls">
-            <!-- Кнопка открытия sidebar на мобиле -->
-            <button class="sidebar-toggle" onclick="toggleSidebar()" style="display:none;" title="Кристаллы">💎</button>
 
+        <div class="header-controls">
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Кристаллы">💎</button>
             <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
             <div class="threat-indicator" id="threatIndicator" title="Уровень угрозы">🟢</div>
             <div class="ws-indicator" id="wsIndicator" title="WebSocket">⚫</div>
-            <div class="architect-badge" id="architectBadge" style="display: none; cursor: pointer;" onclick="openAdminPanel()" title="Кабинет архитектора">👑</div>
-            
+            <div class="architect-badge" id="architectBadge" style="display:none; cursor:pointer;" onclick="openAdminPanel()" title="Кабинет архитектора">👑</div>
+
             <select id="levelSelect" class="level-select">
                 <option value="S0">S0 Free</option>
-                <option value="S1">S1 $0.1</option>
-                <option value="S2">S2 $0.5</option>
-                <option value="S3" selected>S3 $1</option>
-                <option value="S4">S4 $2</option>
-                <option value="S5">S5 $5</option>
-                <option value="S6">S6 $10</option>
+                <option value="S1">S1</option>
+                <option value="S2">S2</option>
+                <option value="S3">S3</option>
+                <option value="S4">S4</option>
+                <option value="S5">S5</option>
+                <option value="S6">S6</option>
             </select>
-            
+
             <select id="providerSelect" class="provider-select" onchange="updateFileAccept()">
                 <option value="auto" selected>🤖 Auto</option>
                 <option value="deepseek">🧠 DeepSeek</option>
@@ -68,14 +94,12 @@
                 <option value="gemini">✨ Gemini</option>
             </select>
 
-
             <button id="profileBtn" class="icon-btn" onclick="openProfile()" title="Мой кабинет">👤</button>
             <button id="settingsBtn" class="icon-btn" onclick="openSettings()">⚙️</button>
             <button id="walletBtn" class="wallet-btn" onclick="connectWallet()">🦊 MetaMask</button>
         </div>
     </header>
 
-    <!-- Оверлей для sidebar на мобиле -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
     <div class="main-container">
@@ -84,11 +108,9 @@
                 <span class="sidebar-title">💎 <span data-i18n="crystals">Кристаллы</span></span>
                 <span class="crystal-count" id="crystalCount">0</span>
             </div>
-            
             <div class="sidebar-search">
                 <input type="text" id="searchInput" placeholder="Поиск кристаллов..." class="search-input">
             </div>
-            
             <div class="sidebar-filters">
                 <button class="filter-btn active" onclick="setFilter('all')" data-i18n="filter_all">Все</button>
                 <button class="filter-btn" onclick="setFilter('verified')">✅</button>
@@ -96,16 +118,13 @@
                 <button class="filter-btn" onclick="setFilter('virus')">🦠</button>
                 <button class="filter-btn" onclick="setFilter('crystal')">💎</button>
             </div>
-            
             <div class="crystal-list" id="crystalList"></div>
-            
             <div class="sidebar-footer">
                 <button class="sidebar-btn" onclick="syncFromDB()" data-i18n="sync">☁️ Синхр.</button>
                 <button class="sidebar-btn" onclick="exportCrystals()" data-i18n="export">📥 Экспорт</button>
                 <button class="sidebar-btn" onclick="importCrystals()" data-i18n="import">📤 Импорт</button>
                 <button class="sidebar-btn" onclick="clearHistory()">🗑️</button>
             </div>
-            
             <div class="sidebar-stats" id="sidebarStats">
                 <div class="stat-item">
                     <span class="stat-value" id="statTotal">0</span>
@@ -127,8 +146,8 @@
         </aside>
 
         <main class="chat">
-            <div class="progress-bar" id="progressBar" style="display: none;"></div>
-            
+            <div class="progress-bar" id="progressBar" style="display:none;"></div>
+
             <div class="messages" id="messages">
                 <div class="welcome-message" id="welcomeMessage">
                     <div class="welcome-icon">🧠</div>
@@ -148,9 +167,8 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="input-area">
-                <!-- Превью прикреплённого файла -->
                 <div class="file-preview" id="filePreview" style="display:none;">
                     <span id="filePreviewIcon">📄</span>
                     <span class="file-preview-name" id="filePreviewName"></span>
@@ -158,33 +176,31 @@
                 </div>
 
                 <div class="input-row">
-                    <span class="suggest-label" data-i18n-prefix="rec_level">Рек. уровень: <span id="suggestLevel">S3</span></span>
+                    <span class="suggest-label" data-i18n-prefix="rec_level">Рек. уровень: <span id="suggestLevel">S0</span></span>
                     <span class="suggest-link" onclick="applySuggestedLevel()" data-i18n="apply">(применить)</span>
                     <span class="input-hint" data-i18n="hint_enter">· Enter — отправить</span>
                     <span class="input-hint" data-i18n="hint_shift">· Shift+Enter — перенос</span>
-                    <label class="stream-toggle" style="display: none;">
-                        <input type="checkbox" id="streamToggle" checked> Stream
+                    <!-- Stream скрыт — не используется -->
+                    <label style="display:none;">
+                        <input type="checkbox" id="streamToggle"> Stream
                     </label>
                 </div>
-                
+
                 <div class="input-wrapper">
-                    <!-- Кнопка прикрепления файла -->
                     <button class="attach-btn" id="attachBtn" onclick="triggerFileUpload()" title="Прикрепить файл" data-i18n-title="attach_title">📎</button>
                     <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)">
 
-                    <textarea 
-                        id="userInput" 
-                        placeholder="Задайте вопрос Brain T₀..." 
+                    <textarea
+                        id="userInput"
+                        placeholder="Задайте вопрос Brain T₀..."
                         rows="1"
                         onkeydown="handleKeyDown(event)"
                         oninput="autoResize(this)"
                     ></textarea>
 
-                    <!-- Кнопка голосового ввода -->
                     <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="Голосовой ввод" data-i18n-title="voice_title">🎤</button>
-
                     <button id="sendBtn" class="send-btn" onclick="sendMessage()">➤</button>
-                    <button id="stopBtn" class="stop-btn" onclick="stopGeneration()" style="display: none;">■</button>
+                    <button id="stopBtn" class="stop-btn" onclick="stopGeneration()" style="display:none;">■</button>
                 </div>
                 <div class="file-type-hint" id="fileTypeHint"></div>
             </div>
@@ -199,8 +215,8 @@
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="settings-group" style="display: none;">
-                    <label data-i18n="label_server">🌐 Сервер API</label>
+                <div class="settings-group" style="display:none;">
+                    <label>🌐 Сервер API</label>
                     <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
                 </div>
                 <div class="settings-group">
@@ -221,7 +237,7 @@
                     <label data-i18n="label_saved">💾 Сохранённые ключи</label>
                     <div id="savedKeysList" style="font-size:13px;color:var(--text-2-dark);">Загрузка...</div>
                     <small id="savedKeysHint" data-i18n="saved_keys_hint">Подключите кошелёк для управления ключами</small>
-                </div>    
+                </div>
                 <div class="settings-group">
                     <small style="color:#8b5cf6;" id="polygonHint">💜 Оплата принимается в <strong>USDC</strong> · Сеть <strong>Polygon</strong> · <a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;" id="polygonLink">Добавить в MetaMask</a></small>
                 </div>
@@ -234,7 +250,7 @@
     </div>
 
     <!-- Соглашение -->
-    <div id="termsModal" class="terms-modal" style="display: none;">
+    <div id="termsModal" class="terms-modal" style="display:none;">
         <div class="terms-modal-content">
             <div class="terms-modal-header">
                 <h2>🧠 BRAIN T₀ v5.0</h2>
@@ -260,7 +276,7 @@
             <div class="terms-modal-footer-note"><span data-i18n="terms_note">* Отказ означает перенаправление на google.com</span></div>
         </div>
     </div>
-    <div id="termsOverlay" class="terms-overlay" style="display: none;"></div>
+    <div id="termsOverlay" class="terms-overlay" style="display:none;"></div>
 
     <!-- Футер -->
     <footer style="text-align:center; padding:12px; color:var(--text-3-dark); font-size:11px;">
@@ -268,7 +284,7 @@
         © 2026 Юрий Сунуров
     </footer>
 
-    <!-- PWA install banner -->
+    <!-- PWA banner -->
     <div class="pwa-install-banner" id="pwaInstallBanner">
         <span>📱 Установить BRAIN T₀ как приложение</span>
         <button class="pwa-install-btn" onclick="installPWA()">Установить</button>
@@ -335,7 +351,7 @@
         document.getElementById('pwaInstallBanner').classList.remove('show');
     }
 
-    // ── Sidebar toggle (мобиле) ──
+    // ── Sidebar toggle ──
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
@@ -343,36 +359,20 @@
         overlay.classList.toggle('show');
     }
 
-    // Показываем кнопку sidebar только на мобиле
-    function checkMobile() {
-        const btn = document.querySelector('.sidebar-toggle');
-        if (window.innerWidth <= 768) {
-            btn.style.display = 'flex';
-        } else {
-            btn.style.display = 'none';
-            document.getElementById('sidebar').classList.remove('show');
-            document.getElementById('sidebarOverlay').classList.remove('show');
-        }
-    }
-    window.addEventListener('resize', checkMobile);
-    checkMobile();
-
-    // ── Язык — автоопределение по браузеру ──
+    // ── i18n ──
     const I18N = {
         ru: {
-            crystals: 'Кристаллы', wallet_btn: '🦊 MetaMask',
-            search_placeholder: 'Поиск кристаллов...', filter_all: 'Все',
-            sync: '☁️ Синхр.', export: '📥 Экспорт', import: '📤 Импорт', stat_total: 'всего',
-            rec_level: 'Рек. уровень:', apply: '(применить)',
-            hint_enter: '· Enter — отправить', hint_shift: '· Shift+Enter — перенос',
-            placeholder: 'Задайте вопрос Brain T₀...',
-            welcome_stats: '69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD',
+            crystals:'Кристаллы', filter_all:'Все', stat_total:'всего',
+            sync:'☁️ Синхр.', export:'📥 Экспорт', import:'📤 Импорт',
+            rec_level:'Рек. уровень:', apply:'(применить)',
+            hint_enter:'· Enter — отправить', hint_shift:'· Shift+Enter — перенос',
+            placeholder:'Задайте вопрос Brain T₀...', search_placeholder:'Поиск кристаллов...',
+            welcome_stats:'69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD',
             tome1:'Том 1: Аксиоматика', tome2:'Том 2: Математика', tome3:'Том 3: Физика',
             tome4:'Том 4: Химия', tome5:'Том 5: Биология', tome6:'Том 6: Психология',
             tome7:'Том 7: Философия', tome8:'Том 8: Синтез', tome9:'Том 9: Безопасность',
-            settings_title:'⚙️ Настройки', label_server:'🌐 Сервер API',
-            label_provider:'🤖 Провайдер ключа', label_apikey:'🔑 API ключ провайдера',
-            label_saved:'💾 Сохранённые ключи', label_wallet:'💰 Кошелёк для оплаты',
+            settings_title:'⚙️ Настройки', label_provider:'🤖 Провайдер ключа',
+            label_apikey:'🔑 API ключ провайдера', label_saved:'💾 Сохранённые ключи',
             btn_save:'Сохранить', btn_cancel:'Отмена',
             tab_stats:'📊 Статистика', tab_users:'👥 Пользователи', tab_crystals:'💎 Кристаллы',
             tab_attacks:'🛡️ Атаки', tab_prompts:'✏️ Промпты', tab_levels:'⚙️ Уровни', tab_economy:'💰 Экономика',
@@ -383,26 +383,23 @@
             footer_terms:'Соглашение', pwaInstall:'📱 Установить BRAIN T₀ как приложение',
             pwaBtn:'Установить', fileHint:'📎 Поддерживаемые форматы: ',
             attach_title:'Прикрепить файл', voice_title:'Голосовой ввод',
-            settings_title:'⚙️ Настройки',
             apikey_hint:'Сохранится на сервер · platform.deepseek.com → API Keys',
             saved_keys_hint:'Подключите кошелёк для управления ключами',
-            polygon_hint:'💜 Оплата принимается в сети <strong>Polygon</strong> (POL) · ',
+            polygon_hint:'💜 Оплата принимается в <strong>USDC</strong> · Сеть <strong>Polygon</strong> · ',
             polygon_link:'Добавить в MetaMask',
         },
         en: {
-            crystals: 'Crystals', wallet_btn: '🦊 MetaMask',
-            search_placeholder: 'Search crystals...', filter_all: 'All',
-            sync: '☁️ Sync', export: '📥 Export', import: '📤 Import', stat_total: 'total',
-            rec_level: 'Rec. level:', apply: '(apply)',
-            hint_enter: '· Enter — send', hint_shift: '· Shift+Enter — newline',
-            placeholder: 'Ask Brain T₀ a question...',
-            welcome_stats: '69 crystals · 9 volumes · PostgreSQL · Redis · 2FA · CI/CD',
+            crystals:'Crystals', filter_all:'All', stat_total:'total',
+            sync:'☁️ Sync', export:'📥 Export', import:'📤 Import',
+            rec_level:'Rec. level:', apply:'(apply)',
+            hint_enter:'· Enter — send', hint_shift:'· Shift+Enter — newline',
+            placeholder:'Ask Brain T₀ a question...', search_placeholder:'Search crystals...',
+            welcome_stats:'69 crystals · 9 volumes · PostgreSQL · Redis · 2FA · CI/CD',
             tome1:'Vol 1: Axiomatics', tome2:'Vol 2: Mathematics', tome3:'Vol 3: Physics',
             tome4:'Vol 4: Chemistry', tome5:'Vol 5: Biology', tome6:'Vol 6: Psychology',
             tome7:'Vol 7: Philosophy', tome8:'Vol 8: Synthesis', tome9:'Vol 9: Security',
-            settings_title:'⚙️ Settings', label_server:'🌐 API Server',
-            label_provider:'🤖 Key Provider', label_apikey:'🔑 Provider API Key',
-            label_saved:'💾 Saved Keys', label_wallet:'💰 Payment Wallet',
+            settings_title:'⚙️ Settings', label_provider:'🤖 Key Provider',
+            label_apikey:'🔑 Provider API Key', label_saved:'💾 Saved Keys',
             btn_save:'Save', btn_cancel:'Cancel',
             tab_stats:'📊 Statistics', tab_users:'👥 Users', tab_crystals:'💎 Crystals',
             tab_attacks:'🛡️ Attacks', tab_prompts:'✏️ Prompts', tab_levels:'⚙️ Levels', tab_economy:'💰 Economy',
@@ -413,186 +410,115 @@
             footer_terms:'Terms', pwaInstall:'📱 Install BRAIN T₀ as an app',
             pwaBtn:'Install', fileHint:'📎 Supported formats: ',
             attach_title:'Attach file', voice_title:'Voice input',
-            settings_title:'⚙️ Settings',
             apikey_hint:'Saved to server · platform.deepseek.com → API Keys',
             saved_keys_hint:'Connect wallet to manage keys',
-            polygon_hint:'💜 Payment accepted on <strong>Polygon</strong> network (POL) · ',
+            polygon_hint:'💜 Payment accepted in <strong>USDC</strong> · Network <strong>Polygon</strong> · ',
             polygon_link:'Add to MetaMask',
         }
     };
 
     const PROVIDER_HINT_EN = {
-        deepseek: 'PDF, TXT, MD, CSV',
-        claude:   'PDF, TXT, images (JPG, PNG, WEBP, GIF)',
-        openai:   'PDF, TXT, images (JPG, PNG, WEBP)',
-        gemini:   'PDF, TXT, images, audio (MP3), video (MP4)',
-        auto:     'PDF, TXT, images'
+        deepseek:'PDF, TXT, MD, CSV', claude:'PDF, TXT, images (JPG, PNG, WEBP, GIF)',
+        openai:'PDF, TXT, images (JPG, PNG, WEBP)', gemini:'PDF, TXT, images, audio (MP3), video (MP4)', auto:'PDF, TXT, images'
+    };
+    const PROVIDER_HINT_RU = {
+        deepseek:'PDF, TXT, MD, CSV', claude:'PDF, TXT, изображения (JPG, PNG, WEBP, GIF)',
+        openai:'PDF, TXT, изображения (JPG, PNG, WEBP)', gemini:'PDF, TXT, изображения, аудио (MP3), видео (MP4)', auto:'PDF, TXT, изображения'
+    };
+    const PROVIDER_ACCEPT = {
+        deepseek:'.pdf,.txt,.md,.csv', claude:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
+        openai:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
+        gemini:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif,.mp3,.wav,.mp4', auto:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif'
     };
 
+    let attachedFile = null;
     const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
     const currentLang = browserLang;
 
     function applyLang() {
         const t = I18N[currentLang];
         document.documentElement.lang = currentLang;
-        // Все элементы с data-i18n
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
             if (t[key] !== undefined) el.textContent = t[key];
         });
-        // Элементы с data-i18n-title
         document.querySelectorAll('[data-i18n-title]').forEach(el => {
             const key = el.getAttribute('data-i18n-title');
             if (t[key] !== undefined) el.title = t[key];
         });
-        // Специальные — placeholder textarea
         const input = document.getElementById('userInput');
         if (input) input.placeholder = t.placeholder;
         const search = document.getElementById('searchInput');
         if (search) search.placeholder = t.search_placeholder;
-        // suggest-label имеет вложенный span — меняем только текст до span
-        const suggestLabel = document.querySelector('.suggest-label');
-        if (suggestLabel) {
-            const span = suggestLabel.querySelector('#suggestLevel');
-            if (span) {
-                suggestLabel.childNodes[0].textContent = t.rec_level + ' ';
-            }
-        }
-        // Кнопки соглашения
         const declineBtn = document.getElementById('termsDeclineBtn');
         if (declineBtn) declineBtn.textContent = t.decline;
         const acceptBtn = document.getElementById('termsAcceptBtn');
-        if (acceptBtn) {
-            const wasDisabled = acceptBtn.disabled;
-            acceptBtn.textContent = t.accept;
-            acceptBtn.disabled = wasDisabled;
-        }
-        // Checkbox span
+        if (acceptBtn) { const d = acceptBtn.disabled; acceptBtn.textContent = t.accept; acceptBtn.disabled = d; }
         const agreeSpan = document.querySelector('.terms-checkbox label span');
         if (agreeSpan) agreeSpan.textContent = t.agree;
-        // PWA banner
         const pwaBannerSpan = document.querySelector('.pwa-install-banner > span');
         if (pwaBannerSpan) pwaBannerSpan.textContent = t.pwaInstall;
         const pwaBtn = document.querySelector('.pwa-install-btn');
         if (pwaBtn) pwaBtn.textContent = t.pwaBtn;
-        // Polygon hint
         const polygonHint = document.getElementById('polygonHint');
         if (polygonHint) polygonHint.innerHTML = t.polygon_hint + '<a href="https://chainlist.org/?search=polygon" target="_blank" style="color:#8b5cf6;">' + t.polygon_link + '</a>';
     }
 
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", applyLang);
-    } else {
-        applyLang();
-    }
-    window.addEventListener("load", applyLang);
+    document.addEventListener('DOMContentLoaded', applyLang);
+    window.addEventListener('load', applyLang);
 
     // ── Голосовой ввод ──
     let recognition = null;
     let isRecording = false;
-
     function toggleVoiceInput() {
         const voiceBtn = document.getElementById('voiceBtn');
-        
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             alert('Голосовой ввод не поддерживается в этом браузере');
             return;
         }
-
-        if (isRecording) {
-            recognition?.stop();
-            return;
-        }
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
+        if (isRecording) { recognition?.stop(); return; }
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SR();
         recognition.lang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
         recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        recognition.onstart = () => {
-            isRecording = true;
-            voiceBtn.classList.add('recording');
-            voiceBtn.textContent = '🔴';
-        };
-
+        recognition.onstart = () => { isRecording = true; voiceBtn.classList.add('recording'); voiceBtn.textContent = '🔴'; };
         recognition.onresult = e => {
             const text = e.results[0][0].transcript;
-            const input = document.getElementById('userInput');
-            input.value = (input.value + ' ' + text).trim();
-            if (typeof autoResize === 'function') autoResize(input);
+            const inp = document.getElementById('userInput');
+            inp.value = (inp.value + ' ' + text).trim();
+            if (typeof autoResize === 'function') autoResize(inp);
         };
-
-        recognition.onend = () => {
-            isRecording = false;
-            voiceBtn.classList.remove('recording');
-            voiceBtn.textContent = '🎤';
-        };
-
-        recognition.onerror = () => {
-            isRecording = false;
-            voiceBtn.classList.remove('recording');
-            voiceBtn.textContent = '🎤';
-        };
-
+        recognition.onend = () => { isRecording = false; voiceBtn.classList.remove('recording'); voiceBtn.textContent = '🎤'; };
+        recognition.onerror = () => { isRecording = false; voiceBtn.classList.remove('recording'); voiceBtn.textContent = '🎤'; };
         recognition.start();
     }
 
     // ── Файлы ──
-    const PROVIDER_ACCEPT = {
-        deepseek: '.pdf,.txt,.md,.csv',
-        claude:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
-        openai:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
-        gemini:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif,.mp3,.wav,.mp4',
-        auto:     '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif'
-    };
-
-    const PROVIDER_HINT = {
-        deepseek: 'PDF, TXT, MD, CSV',
-        claude:   'PDF, TXT, изображения (JPG, PNG, WEBP, GIF)',
-        openai:   'PDF, TXT, изображения (JPG, PNG, WEBP)',
-        gemini:   'PDF, TXT, изображения, аудио (MP3), видео (MP4)',
-        auto:     'PDF, TXT, изображения'
-    };
-
-    let attachedFile = null;
-
     function updateFileAccept() {
         const provider = document.getElementById('providerSelect').value;
         const fileInput = document.getElementById('fileInput');
         const hint = document.getElementById('fileTypeHint');
         fileInput.accept = PROVIDER_ACCEPT[provider] || PROVIDER_ACCEPT.auto;
-        const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT;
+        const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT_RU;
         hint.textContent = I18N[currentLang].fileHint + (hints[provider] || hints.auto);
     }
-
-    function triggerFileUpload() {
-        updateFileAccept();
-        document.getElementById('fileInput').click();
-    }
-
+    function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
         attachedFile = file;
-        
         const preview = document.getElementById('filePreview');
         const name = document.getElementById('filePreviewName');
         const icon = document.getElementById('filePreviewIcon');
-        const attachBtn = document.getElementById('attachBtn');
-
-        // Иконка по типу
         if (file.type.startsWith('image/')) icon.textContent = '🖼️';
         else if (file.type === 'application/pdf') icon.textContent = '📄';
         else if (file.type.startsWith('audio/')) icon.textContent = '🎵';
         else if (file.type.startsWith('video/')) icon.textContent = '🎬';
         else icon.textContent = '📎';
-
         name.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
         preview.style.display = 'flex';
-        attachBtn.classList.add('has-file');
+        document.getElementById('attachBtn').classList.add('has-file');
     }
-
     function removeAttachedFile() {
         attachedFile = null;
         document.getElementById('filePreview').style.display = 'none';
@@ -600,7 +526,6 @@
         document.getElementById('attachBtn').classList.remove('has-file');
     }
 
-    // Инициализация подсказки файлов
     updateFileAccept();
     </script>
 </body>
