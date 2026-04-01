@@ -446,6 +446,38 @@ async function sendMessage() {
     }
 }
 
+
+// ── Конвертация файла в base64 для отправки ──────────────────
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+async function fileToBase64(file) {
+    if (!file) return null;
+
+    // Проверка размера
+    if (file.size > MAX_FILE_SIZE) {
+        showNotification(`❌ Файл слишком большой: ${(file.size/1024/1024).toFixed(1)}MB. Максимум 5MB.`, 'error');
+        return null;
+    }
+
+    // Предупреждение о совместимости провайдера с изображениями
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    const provider = document.getElementById('providerSelect')?.value || 'auto';
+    if ((isImage || isPdf) && ['deepseek', 'auto'].includes(provider)) {
+        showNotification(`⚠️ ${provider} не поддерживает изображения/PDF. Переключитесь на Claude, GPT или Gemini.`, 'warning');
+    }
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve({ name: file.name, type: file.type, data: base64, size: file.size });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 async function sendNormalMessage(question, level, txHash) {
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
@@ -460,7 +492,11 @@ async function sendNormalMessage(question, level, txHash) {
             level,
             provider: CONFIG.PROVIDER,
             tx_hash: txHash,
-            history: history.slice(-10)
+            history: history.slice(-10),
+            ...(window.attachedFile ? await (async () => {
+                const f = await fileToBase64(window.attachedFile);
+                return f ? { file: f } : {};
+            })() : {})
         })
     });
 
@@ -489,6 +525,14 @@ async function sendNormalMessage(question, level, txHash) {
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
+
+    // Очищаем прикреплённый файл после отправки
+    if (window.attachedFile) {
+        window.attachedFile = null;
+        document.getElementById('filePreview').style.display = 'none';
+        document.getElementById('fileInput').value = '';
+        document.getElementById('attachBtn')?.classList.remove('has-file');
+    }
 }
 
 async function sendStreamMessage(question, level, txHash) {
