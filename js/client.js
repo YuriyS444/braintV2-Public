@@ -38,7 +38,7 @@ const elements = {
     statDiamonds: document.getElementById('statDiamonds'),
     statVerified: document.getElementById('statVerified'),
     statVirus: document.getElementById('statVirus'),
-    progressBar: document.querySelector('.progress-bar')
+    progressBar: document.getElementById('progressBar')
 };
 
 
@@ -363,7 +363,8 @@ async function sendMessage() {
         await login();
         if (!token) return;
     }
-    const useStream = elements.streamToggle.checked;
+    const streamToggleEl = document.getElementById('streamToggle');
+    const useStream = streamToggleEl && !streamToggleEl.closest('[style*="display: none"]') && streamToggleEl.checked;
 
     elements.userInput.value = '';
     autoResize(elements.userInput);
@@ -1119,7 +1120,6 @@ async function saveSettings() {
     const serverUrl   = document.getElementById('serverUrl')?.value?.trim();
     const apiKey      = document.getElementById('apiKey')?.value?.trim();
     const archKey     = document.getElementById('architectKey')?.value?.trim();
-    const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
     // Сохраняем локально
