@@ -431,7 +431,7 @@
         gemini:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif,.mp3,.wav,.mp4', auto:'.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif'
     };
 
-    let attachedFile = null;
+    window.window.attachedFile = null;
     const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
     const currentLang = browserLang;
 
@@ -506,7 +506,7 @@
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
-        attachedFile = file;
+        window.attachedFile = file;
         const preview = document.getElementById('filePreview');
         const name = document.getElementById('filePreviewName');
         const icon = document.getElementById('filePreviewIcon');
@@ -520,7 +520,7 @@
         document.getElementById('attachBtn').classList.add('has-file');
     }
     function removeAttachedFile() {
-        attachedFile = null;
+        window.attachedFile = null;
         document.getElementById('filePreview').style.display = 'none';
         document.getElementById('fileInput').value = '';
         document.getElementById('attachBtn').classList.remove('has-file');
