@@ -188,7 +188,7 @@
 
                 <div class="input-wrapper">
                     <button class="attach-btn" id="attachBtn" onclick="triggerFileUpload()" title="Прикрепить файл" data-i18n-title="attach_title">📎</button>
-                    <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)">
+                    <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)">
 
                     <textarea
                         id="userInput"
@@ -502,31 +502,44 @@
         const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT_RU;
         hint.textContent = I18N[currentLang].fileHint + (hints[provider] || hints.auto);
     }
-    function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        window.attachedFile = file;
-        const preview = document.getElementById('filePreview');
-        const name = document.getElementById('filePreviewName');
-        const icon = document.getElementById('filePreviewIcon');
+function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
+function handleFileSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    window.attachedFiles = files;
+    window.attachedFile = files[0];
+
+    const preview = document.getElementById('filePreview');
+    const name = document.getElementById('filePreviewName');
+    const icon = document.getElementById('filePreviewIcon');
+
+    if (files.length === 1) {
+        const file = files[0];
         if (file.type.startsWith('image/')) icon.textContent = '🖼️';
         else if (file.type === 'application/pdf') icon.textContent = '📄';
         else if (file.type.startsWith('audio/')) icon.textContent = '🎵';
         else if (file.type.startsWith('video/')) icon.textContent = '🎬';
         else icon.textContent = '📎';
-        name.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-        preview.style.display = 'flex';
-        document.getElementById('attachBtn').classList.add('has-file');
-    }
-    function removeAttachedFile() {
-        window.attachedFile = null;
-        document.getElementById('filePreview').style.display = 'none';
-        document.getElementById('fileInput').value = '';
-        document.getElementById('attachBtn').classList.remove('has-file');
+        name.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    } else {
+        icon.textContent = '📚';
+        const totalKb = (files.reduce((sum, f) => sum + f.size, 0) / 1024).toFixed(1);
+        name.textContent = `Файлов: ${files.length} (${totalKb} KB)`;
     }
 
-    updateFileAccept();
+    preview.style.display = 'flex';
+    document.getElementById('attachBtn').classList.add('has-file');
+}
+function removeAttachedFile() {
+    window.attachedFiles = [];
+    window.attachedFile = null;
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('attachBtn').classList.remove('has-file');
+}
+
+updateFileAccept();
     </script>
 </body>
 </html>
