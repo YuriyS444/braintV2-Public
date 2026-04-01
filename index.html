@@ -502,44 +502,55 @@
         const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT_RU;
         hint.textContent = I18N[currentLang].fileHint + (hints[provider] || hints.auto);
     }
-function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
+    function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
+    
 function handleFileSelect(e) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
 
-    window.attachedFiles = files;
-    window.attachedFile = files[0];
+        window.attachedFiles = files;
+        window.attachedFile = files[0] || null;
 
-    const preview = document.getElementById('filePreview');
-    const name = document.getElementById('filePreviewName');
-    const icon = document.getElementById('filePreviewIcon');
+        const preview = document.getElementById('filePreview');
+        const name = document.getElementById('filePreviewName');
+        const icon = document.getElementById('filePreviewIcon');
 
-    if (files.length === 1) {
-        const file = files[0];
-        if (file.type.startsWith('image/')) icon.textContent = '🖼️';
-        else if (file.type === 'application/pdf') icon.textContent = '📄';
-        else if (file.type.startsWith('audio/')) icon.textContent = '🎵';
-        else if (file.type.startsWith('video/')) icon.textContent = '🎬';
-        else icon.textContent = '📎';
-        name.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-    } else {
-        icon.textContent = '📚';
-        const totalKb = (files.reduce((sum, f) => sum + f.size, 0) / 1024).toFixed(1);
-        name.textContent = `Файлов: ${files.length} (${totalKb} KB)`;
+        if (files.length === 1) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) icon.textContent = '🖼️';
+            else if (file.type === 'application/pdf') icon.textContent = '📄';
+            else if (file.type.startsWith('audio/')) icon.textContent = '🎵';
+            else if (file.type.startsWith('video/')) icon.textContent = '🎬';
+            else if (file.type === 'text/markdown' || file.name.endsWith('.md')) icon.textContent = '📝';
+            else icon.textContent = '📎';
+            name.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        } else {
+            icon.textContent = '📚';
+            const totalKb = (files.reduce((sum, f) => sum + f.size, 0) / 1024).toFixed(1);
+            name.textContent = `Файлов: ${files.length} (${totalKb} KB)`;
+        }
+
+        preview.style.display = 'flex';
+        document.getElementById('attachBtn').classList.add('has-file');
+
+        const hasImageOrPdf = files.some(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+        const provider = document.getElementById('providerSelect')?.value || 'auto';
+        if (hasImageOrPdf && provider === 'deepseek') {
+            alert('Для изображений и PDF выберите Claude, GPT или Gemini.');
+        }
     }
 
-    preview.style.display = 'flex';
-    document.getElementById('attachBtn').classList.add('has-file');
-}
+    
 function removeAttachedFile() {
-    window.attachedFiles = [];
-    window.attachedFile = null;
-    document.getElementById('filePreview').style.display = 'none';
-    document.getElementById('fileInput').value = '';
-    document.getElementById('attachBtn').classList.remove('has-file');
-}
+        window.attachedFiles = [];
+        window.attachedFile = null;
+        document.getElementById('filePreview').style.display = 'none';
+        document.getElementById('fileInput').value = '';
+        document.getElementById('attachBtn').classList.remove('has-file');
+    }
 
-updateFileAccept();
+
+    updateFileAccept();
     </script>
 </body>
 </html>
