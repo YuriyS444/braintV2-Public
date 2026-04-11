@@ -372,8 +372,7 @@ async function sendMessage() {
         if (!token) return;
     }
 
-    const streamToggleEl = document.getElementById('streamToggle');
-    const useStream = !!(streamToggleEl && !streamToggleEl.closest('[style*="display: none"]') && streamToggleEl.checked);
+    const useStream = false; // Stream отключён
 
     elements.userInput.value = '';
     autoResize(elements.userInput);
@@ -429,7 +428,7 @@ async function sendMessage() {
         const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
 
         if (useStream) {
-            await sendStreamMessage(effectiveQuestion, level, txHash);
+            await sendNormalMessage(effectiveQuestion, level, txHash);
         } else {
             await sendNormalMessage(effectiveQuestion, level, txHash);
         }
@@ -443,6 +442,8 @@ async function sendMessage() {
         elements.sendBtn.style.display = 'flex';
         elements.stopBtn.style.display = 'none';
         abortController = null;
+        // Очищаем файлы в любом случае (успех или ошибка)
+        if (typeof removeAttachedFile === 'function') removeAttachedFile();
     }
 }
 
@@ -717,29 +718,36 @@ async function processPayment(level, price, ownerWallet) {
 
         showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
 
+        // Двухшаговая схема: сначала подтверждаем платёж, потом запрашиваем ответ
         for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
             try {
-                const verifyRes = await fetch(
-                    `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
-                );
-                const verifyData = await verifyRes.json();
-                if (verifyData.ok) {
+                const confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ tx_hash: txHash, level })
+                });
+                const confirmData = await confirmRes.json();
+
+                if (confirmData.success || confirmData.reused) {
                     showNotification('✅ Платёж подтверждён', 'success');
                     return txHash;
                 }
-                if (verifyData.reason && 
-                    !verifyData.reason.includes('not found') && 
-                    !verifyData.reason.includes('pending') &&
-                    !verifyData.reason.includes('Waiting')) {
-                    showNotification('⚠️ ' + verifyData.reason, 'warning');
-                    return txHash;
+                if (confirmRes.status === 402) {
+                    const reason = confirmData.error || '';
+                    if (!reason.includes('not found') && !reason.includes('pending') && !reason.includes('Waiting')) {
+                        showNotification('⚠️ ' + reason, 'warning');
+                        return null;
+                    }
                 }
             } catch { /* продолжаем ждать */ }
         }
 
-        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
-        return txHash;
+        showNotification('⏱️ Таймаут подтверждения. Попробуйте позже.', 'warning');
+        return null;
 
     } catch (error) {
         if (error.code === 4001) {
