@@ -677,14 +677,14 @@ async function processPayment(level, price, ownerWallet) {
     const confirmed = confirm(
         `💳 Оплата уровня ${level}\n\n` +
         `Сумма: ${price} USDC\n` +
-        `Токен: USDC (Polygon)\n` +
+        `Сеть: Polygon\n` +
         `Получатель: ${ownerWallet}\n\n` +
-        `После оплаты ответ будет получен автоматически.\nПродолжить?`
+        `Продолжить?`
     );
     if (!confirmed) return null;
 
     try {
-        // Переключаемся на Polygon
+        // Переключение сети Polygon
         try {
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
@@ -702,8 +702,70 @@ async function processPayment(level, price, ownerWallet) {
                         blockExplorerUrls: ['https://polygonscan.com']
                     }]
                 });
+            } else {
+                throw switchError;
             }
         }
+
+        // === USDC transfer ===
+        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
+        const usdcAmount = Math.floor(price * 1e6);
+        const amountHex = usdcAmount.toString(16).padStart(64, '0');
+        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
+
+        const data = '0xa9059cbb' + recipientHex + amountHex;
+
+        const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: wallet,
+                to: USDC_CONTRACT,
+                value: '0x0',
+                data
+            }]
+        });
+
+        showNotification('⏳ Ожидание подтверждения...', 'info');
+
+        // ⏱️ небольшая пауза (чтобы tx попал в сеть)
+        await new Promise(r => setTimeout(r, 6000));
+
+        // === CONFIRM (ОДИН ЧЁТКИЙ ВЫЗОВ) ===
+        const confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                tx_hash: txHash,
+                level
+            })
+        });
+
+        const confirmData = await confirmRes.json();
+
+        if (!confirmRes.ok) {
+            throw new Error(confirmData.error || 'Payment confirm failed');
+        }
+
+        if (!confirmData.success && !confirmData.reused) {
+            throw new Error(confirmData.error || 'Payment not confirmed');
+        }
+
+        showNotification('✅ Платёж подтверждён', 'success');
+        return txHash;
+
+    } catch (error) {
+        if (error.code === 4001) {
+            showNotification('Платёж отменён', 'info');
+        } else {
+            showNotification('❌ Ошибка оплаты: ' + error.message, 'error');
+        }
+        return null;
+    }
+}
 
         const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
         const usdcAmount = Math.floor(price * 1e6);
