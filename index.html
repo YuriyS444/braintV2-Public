@@ -17,7 +17,7 @@
         .sidebar a[href*="railway"], .sidebar a[href*="up.railway"] { display: none !important; }
 
         .sidebar-toggle {
-            display: flex !important;
+            display: none; /* скрыта на десктопе */
             background: var(--surface-2-dark);
             border: 1px solid var(--border-dark);
             border-radius: 6px;
@@ -70,7 +70,7 @@
         </div>
 
         <div class="header-controls">
-            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Кристаллы">💎</button>
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Кристаллы" id="sidebarToggleBtn">💎</button>
             <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
             <div class="threat-indicator" id="threatIndicator" title="Уровень угрозы">🟢</div>
             <div class="ws-indicator" id="wsIndicator" title="WebSocket">⚫</div>
