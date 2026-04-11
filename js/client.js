@@ -427,11 +427,7 @@ async function sendMessage() {
 
         const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
 
-        if (useStream) {
-            await sendNormalMessage(effectiveQuestion, level, txHash);
-        } else {
-            await sendNormalMessage(effectiveQuestion, level, txHash);
-        }
+        await sendNormalMessage(effectiveQuestion, level, txHash);
     } catch (error) {
         if (error.name !== 'AbortError') {
             removeTypingIndicator();
@@ -442,7 +438,6 @@ async function sendMessage() {
         elements.sendBtn.style.display = 'flex';
         elements.stopBtn.style.display = 'none';
         abortController = null;
-        // Очищаем файлы в любом случае (успех или ошибка)
         if (typeof removeAttachedFile === 'function') removeAttachedFile();
     }
 }
@@ -669,6 +664,16 @@ function stopGeneration() {
 async function processPayment(level, price, ownerWallet) {
     if (!price || price <= 0) return null;
 
+    if (!ownerWallet) {
+        showNotification('❌ Адрес получателя не задан', 'error');
+        return null;
+    }
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
+        showNotification('❌ Некорректный адрес получателя', 'error');
+        return null;
+    }
+
     if (!wallet) {
         await connectWallet();
         if (!wallet) return null;
@@ -684,7 +689,6 @@ async function processPayment(level, price, ownerWallet) {
     if (!confirmed) return null;
 
     try {
-        // Переключение сети Polygon
         try {
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
@@ -707,13 +711,10 @@ async function processPayment(level, price, ownerWallet) {
             }
         }
 
-        // === USDC transfer ===
         const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-
-        const usdcAmount = Math.floor(price * 1e6);
+        const usdcAmount = Math.round(Number(price) * 1e6);
         const amountHex = usdcAmount.toString(16).padStart(64, '0');
         const recipientHex = ownerWallet.slice(2).padStart(64, '0');
-
         const data = '0xa9059cbb' + recipientHex + amountHex;
 
         const txHash = await window.ethereum.request({
@@ -728,94 +729,55 @@ async function processPayment(level, price, ownerWallet) {
 
         showNotification('⏳ Ожидание подтверждения...', 'info');
 
-        // ⏱️ небольшая пауза (чтобы tx попал в сеть)
-        await new Promise(r => setTimeout(r, 6000));
-
-        // === CONFIRM (ОДИН ЧЁТКИЙ ВЫЗОВ) ===
-        const confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                tx_hash: txHash,
-                level
-            })
-        });
-
-        const confirmData = await confirmRes.json();
-
-        if (!confirmRes.ok) {
-            throw new Error(confirmData.error || 'Payment confirm failed');
+        if (!token) {
+            throw new Error('Требуется авторизация перед подтверждением оплаты');
         }
 
-        if (!confirmData.success && !confirmData.reused) {
-            throw new Error(confirmData.error || 'Payment not confirmed');
+        let confirmData = null;
+        let confirmRes = null;
+
+        for (let i = 0; i < 3; i++) {
+            await new Promise(r => setTimeout(r, 6000));
+
+            confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    tx_hash: txHash,
+                    level
+                })
+            });
+
+            confirmData = await confirmRes.json().catch(() => ({}));
+
+            if (confirmRes.ok && (confirmData.success || confirmData.reused)) {
+                showNotification('✅ Платёж подтверждён', 'success');
+                return txHash;
+            }
+
+            if (confirmRes.status === 401) {
+                throw new Error('Сессия истекла. Войдите заново.');
+            }
+
+            if (confirmRes.status === 409) {
+                throw new Error(confirmData?.error || 'Транзакция уже использована');
+            }
+
+            if (confirmRes.status !== 402) {
+                break;
+            }
         }
 
-        showNotification('✅ Платёж подтверждён', 'success');
-        return txHash;
+        throw new Error(confirmData?.error || 'Payment confirm failed');
 
     } catch (error) {
         if (error.code === 4001) {
             showNotification('Платёж отменён', 'info');
         } else {
             showNotification('❌ Ошибка оплаты: ' + error.message, 'error');
-        }
-        return null;
-    }
-}
-
-        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.floor(price * 1e6);
-        const amountHex = usdcAmount.toString(16).padStart(64, '0');
-        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
-        const data = '0xa9059cbb' + recipientHex + amountHex;
-
-        const txHash = await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
-        });
-
-        showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
-
-        // Двухшаговая схема: сначала подтверждаем платёж, потом запрашиваем ответ
-        for (let i = 0; i < 12; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            try {
-                const confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ tx_hash: txHash, level })
-                });
-                const confirmData = await confirmRes.json();
-
-                if (confirmData.success || confirmData.reused) {
-                    showNotification('✅ Платёж подтверждён', 'success');
-                    return txHash;
-                }
-                if (confirmRes.status === 402) {
-                    const reason = confirmData.error || '';
-                    if (!reason.includes('not found') && !reason.includes('pending') && !reason.includes('Waiting')) {
-                        showNotification('⚠️ ' + reason, 'warning');
-                        return null;
-                    }
-                }
-            } catch { /* продолжаем ждать */ }
-        }
-
-        showNotification('⏱️ Таймаут подтверждения. Попробуйте позже.', 'warning');
-        return null;
-
-    } catch (error) {
-        if (error.code === 4001) {
-            showNotification('Платёж отменён', 'info');
-        } else {
-            showNotification('❌ Ошибка: ' + error.message, 'error');
         }
         return null;
     }
@@ -1669,7 +1631,7 @@ async function loadAdminUsers(search = '', blocked = '') {
                 </td>
             </tr>`).join('')}
             </tbody>
-        </table></div>`;
+        <tr></div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1797,7 +1759,7 @@ async function loadAdminAttacks() {
                 <td>${b.reason || '—'}</td>
                 <td>${b.expires_at ? new Date(b.expires_at).toLocaleDateString() : '∞'}</td>
                 <td><button class="admin-btn-sm ok" onclick="adminUnblockIp('${b.ip}')">✅ Снять</button></td>
-            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;opacity:.5">Нет заблокированных IP</td></tr>'}
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;opacity:.5">Нет заблокированных IP</tr>'}
             </tbody>
         </table></div>
 
