@@ -202,27 +202,17 @@ header {
     display: flex;
     height: calc(100vh - 60px);
     overflow: hidden;
-    position: relative;
 }
 
 .sidebar {
-    position: fixed;
-    left: 0;
-    top: 60px;
-    bottom: 0;
     width: 280px;
+    min-width: 280px;
     border-right: 1px solid var(--border-dark);
     background: var(--surface-dark);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    z-index: 200;
-    box-shadow: 4px 0 20px rgba(0,0,0,0.4);
-}
-.sidebar.show {
-    transform: translateX(0);
+    flex-shrink: 0;
 }
 
 .sidebar-header {
@@ -430,9 +420,6 @@ header {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    max-width: 860px;
-    margin: 0 auto;
-    width: 100%;
 }
 
 .progress-bar {
