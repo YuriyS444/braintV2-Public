@@ -433,6 +433,7 @@
 
     window.attachedFile = null;
     const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
+    window.currentLang = browserLang;
     const currentLang = browserLang;
 
     function applyLang() {
