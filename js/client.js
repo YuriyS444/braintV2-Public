@@ -1,3 +1,6 @@
+// currentLang — берётся из index.html (window.currentLang) или определяется здесь
+const currentLang = window.currentLang || (navigator.language?.startsWith('ru') ? 'ru' : 'en');
+
 const CONFIG = {
     API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
@@ -41,9 +44,43 @@ const elements = {
     progressBar: document.getElementById('progressBar')
 };
 
+// ============================================================
+// Инициализация и восстановление состояния
+// ============================================================
+
+async function restoreWallet() {
+    if (!window.ethereum) return;
+    try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+            wallet = accounts[0];
+            elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+            elements.walletBtn.classList.add('connected');
+        }
+    } catch {}
+}
+
+// Слушатель смены аккаунта в MetaMask
+if (window.ethereum) {
+    window.ethereum.on('accountsChanged', (accounts) => {
+        wallet = accounts[0] || null;
+        if (wallet) {
+            elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+            elements.walletBtn.classList.add('connected');
+        } else {
+            elements.walletBtn.textContent = '🦊 MetaMask';
+            elements.walletBtn.classList.remove('connected');
+        }
+        // При смене аккаунта сбрасываем токен
+        token = null;
+        sessionStorage.removeItem('brain_token');
+        isArchitect = false;
+        elements.architectBadge.style.display = 'none';
+    });
+}
 
 // ============================================================
-// Индикатор угроз — показывает уровень атак из attack_logs
+// Индикатор угроз
 // ============================================================
 async function updateThreatIndicator() {
     const el = elements.threatIndicator;
@@ -67,11 +104,13 @@ async function updateThreatIndicator() {
         const info = map[level] || map.low;
         el.textContent = info.icon;
         el.title = info.title;
-    } catch { /* silent — не мешаем UI */ }
+    } catch { /* silent */ }
 }
 
 async function init() {
     document.documentElement.setAttribute('data-theme', CONFIG.THEME);
+    
+    await restoreWallet();
     
     if (token) {
         await verifyToken();
@@ -93,6 +132,10 @@ function debounce(func, wait) {
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
 }
+
+// ============================================================
+// Подключение кошелька и авторизация
+// ============================================================
 
 async function connectWallet() {
     if (!window.ethereum) {
@@ -188,6 +231,10 @@ async function verifyToken() {
         sessionStorage.removeItem('brain_token');
     }
 }
+
+// ============================================================
+// Кристаллы
+// ============================================================
 
 async function loadCrystals(page = 1) {
     if (!token) return;
@@ -349,103 +396,10 @@ function importCrystals() {
     input.click();
 }
 
+// ============================================================
+// Файлы
+// ============================================================
 
-async function sendMessage() {
-    const question = elements.userInput.value.trim();
-    const files = getAttachedFiles();
-    const provider = getSelectedProvider();
-
-    if (!question && !files.length) return;
-
-    if (!CONFIG.API_URL) {
-        openSettings();
-        return;
-    }
-
-    if (!validateAttachedFilesForProvider(files, provider)) {
-        return;
-    }
-
-    const level = elements.levelSelect.value;
-    if (!token && level !== 'S0') {
-        await login();
-        if (!token) return;
-    }
-
-    const useStream = false; // Stream отключён
-
-    elements.userInput.value = '';
-    autoResize(elements.userInput);
-
-    addUserMessage(question || (files.length === 1 ? `📎 ${files[0].name}` : `📎 Файлов: ${files.length}`));
-    addTypingIndicator();
-
-    if (elements.progressBar) elements.progressBar.style.display = 'block';
-    elements.sendBtn.style.display = 'none';
-    elements.stopBtn.style.display = 'flex';
-    abortController = new AbortController();
-
-    try {
-        let txHash = null;
-        let price = 0;
-        let ownerWallet = CONFIG.OWNER_WALLET;
-
-        try {
-            const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
-            const cfgData = await cfgRes.json();
-            const levels = cfgData.levels || {};
-            price = parseFloat(levels[level]?.price || 0);
-            if (cfgData.owner_wallet) {
-                ownerWallet = cfgData.owner_wallet;
-                CONFIG.OWNER_WALLET = ownerWallet;
-            }
-        } catch {}
-
-        if (files.length) {
-            showNotification(files.length === 1 ? `📎 Отправка файла: ${files[0].name}...` : `📎 Отправка файлов: ${files.length}...`, 'info');
-        }
-
-        if (price > 0 && !isArchitect) {
-            if (!ownerWallet) {
-                showNotification('❌ Адрес получателя не загружен', 'error');
-                removeTypingIndicator();
-                return;
-            }
-            txHash = await processPayment(level, price, ownerWallet);
-            if (!txHash) {
-                removeTypingIndicator();
-                return;
-            }
-        }
-
-        try {
-            const suggestQuery = question || 'Анализ прикреплённых файлов';
-            const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(suggestQuery)}`);
-            const suggestData = await suggestRes.json();
-            if (suggestData?.level) elements.suggestLevel.textContent = suggestData.level;
-        } catch {}
-
-        const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
-
-        await sendNormalMessage(effectiveQuestion, level, txHash);
-    } catch (error) {
-        if (error.name !== 'AbortError') {
-            removeTypingIndicator();
-            addErrorMessage(error.message);
-        }
-    } finally {
-        if (elements.progressBar) elements.progressBar.style.display = 'none';
-        elements.sendBtn.style.display = 'flex';
-        elements.stopBtn.style.display = 'none';
-        abortController = null;
-        if (typeof removeAttachedFile === 'function') removeAttachedFile();
-    }
-}
-
-
-
-
-// ── Файлы: прод-режим ────────────────────────────────────────
 window.attachedFiles = window.attachedFiles || [];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
@@ -494,9 +448,6 @@ async function filesToPayload() {
     return result;
 }
 
-// ── Конвертация файла в base64 для отправки ──────────────────
-
-
 async function fileToBase64(file) {
     if (!file) return null;
 
@@ -517,10 +468,267 @@ async function fileToBase64(file) {
     });
 }
 
+// ============================================================
+// Платёж
+// ============================================================
 
+async function processPayment(level, price, ownerWallet) {
+    if (!price || price <= 0) return null;
 
-async function sendNormalMessage(question, level, txHash) {
-    const files = await filesToPayload();
+    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
+        showNotification('❌ Некорректный адрес получателя', 'error');
+        return null;
+    }
+
+    if (!wallet) {
+        await connectWallet();
+        if (!wallet) return null;
+    }
+
+    if (!token) {
+        await login();
+        if (!token) {
+            showNotification('❌ Сначала авторизуйся', 'error');
+            return null;
+        }
+    }
+
+    if (window.__paymentInProgress) {
+        showNotification('⏳ Уже выполняется платёж', 'info');
+        return null;
+    }
+    window.__paymentInProgress = true;
+
+    try {
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x89' }]
+        }).catch(async (e) => {
+            if (e.code === 4902) {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: '0x89',
+                        chainName: 'Polygon',
+                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+                        rpcUrls: ['https://polygon-rpc.com'],
+                        blockExplorerUrls: ['https://polygonscan.com']
+                    }]
+                });
+            } else throw e;
+        });
+
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== '0x89') {
+            throw new Error('Не удалось переключиться на Polygon');
+        }
+
+        const USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
+        const amount = Math.round(Number(price) * 1e6);
+        const amountHex = amount.toString(16).padStart(64, '0');
+        const toHex = ownerWallet.slice(2).padStart(64, '0');
+
+        const data = '0xa9059cbb' + toHex + amountHex;
+
+        const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: wallet,
+                to: USDC,
+                data,
+                value: '0x0'
+            }]
+        });
+
+        showNotification(
+            `⏳ Транзакция отправлена\n${txHash.slice(0, 10)}...${txHash.slice(-6)}\nhttps://polygonscan.com/tx/${txHash}`,
+            'info'
+        );
+
+        const MAX_SECONDS = 90;
+        const INTERVAL = 2000;
+        const MAX_TRIES = Math.floor((MAX_SECONDS * 1000) / INTERVAL);
+
+        let confirmData = null;
+
+        for (let i = 0; i < MAX_TRIES; i++) {
+            await new Promise(r => setTimeout(r, INTERVAL));
+
+            const res = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    tx_hash: txHash,
+                    level
+                })
+            });
+
+            confirmData = await res.json().catch(() => ({}));
+
+            if (res.ok && (confirmData.success || confirmData.reused)) {
+                showNotification('✅ Оплата подтверждена', 'success');
+                return txHash;
+            }
+
+            if (res.status === 402) continue;
+
+            if (res.status === 409) {
+                showNotification('⚠️ Уже использована, но доступ есть', 'warning');
+                return txHash;
+            }
+
+            if (res.status === 401) {
+                throw new Error('Сессия истекла');
+            }
+
+            throw new Error(confirmData.error || 'Ошибка подтверждения');
+        }
+
+        throw new Error('Сеть долго не подтверждает транзакцию');
+
+    } catch (err) {
+        if (err.code === 4001) {
+            showNotification('Платёж отменён', 'info');
+        } else {
+            showNotification('❌ ' + err.message, 'error');
+        }
+        return null;
+    } finally {
+        window.__paymentInProgress = false;
+    }
+}
+
+// ============================================================
+// Основная отправка сообщения
+// ============================================================
+
+async function sendMessage() {
+    if (window.__askInProgress) {
+        showNotification('⏳ Уже выполняется запрос', 'info');
+        return;
+    }
+    window.__askInProgress = true;
+
+    try {
+        const question = elements.userInput.value.trim();
+        const files = getAttachedFiles();
+        const provider = getSelectedProvider();
+
+        if (!question && !files.length) return;
+
+        if (!CONFIG.API_URL) {
+            openSettings();
+            return;
+        }
+
+        if (!validateAttachedFilesForProvider(files, provider)) return;
+
+        const level = elements.levelSelect.value;
+
+        // 1. Сначала готовим файлы
+        const filesPayload = await filesToPayload();
+
+        // 2. Получаем цену и кошелёк
+        let price = 0;
+        let ownerWallet = CONFIG.OWNER_WALLET;
+
+        try {
+            const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
+            const cfgData = await cfgRes.json();
+            const levels = cfgData.levels || {};
+            price = parseFloat(levels[level]?.price || 0);
+            if (cfgData.owner_wallet) {
+                ownerWallet = cfgData.owner_wallet;
+                CONFIG.OWNER_WALLET = ownerWallet;
+            }
+        } catch {}
+
+        // 3. Авторизация для платных уровней
+        if (price > 0 && !isArchitect) {
+            if (!wallet) {
+                await connectWallet();
+                if (!wallet) {
+                    showNotification('❌ Подключите MetaMask', 'error');
+                    return;
+                }
+            }
+
+            if (!CONFIG.API_KEY) {
+                openSettings();
+                showNotification('❌ Для оплаты нужен API ключ провайдера', 'error');
+                return;
+            }
+
+            if (!token) {
+                await login();
+                if (!token) {
+                    showNotification('❌ Не удалось авторизоваться', 'error');
+                    return;
+                }
+            }
+        }
+
+        // 4. Оплата
+        let txHash = null;
+        if (price > 0 && !isArchitect) {
+            if (!ownerWallet) {
+                showNotification('❌ Адрес получателя не загружен', 'error');
+                return;
+            }
+            txHash = await processPayment(level, price, ownerWallet);
+            if (!txHash) return;
+        }
+
+        // 5. Очистка UI перед отправкой
+        elements.userInput.value = '';
+        autoResize(elements.userInput);
+
+        addUserMessage(question || (files.length === 1 ? `📎 ${files[0].name}` : `📎 Файлов: ${files.length}`));
+        addTypingIndicator();
+
+        if (elements.progressBar) elements.progressBar.style.display = 'block';
+        elements.sendBtn.style.display = 'none';
+        elements.stopBtn.style.display = 'flex';
+        elements.sendBtn.disabled = true;
+
+        abortController = new AbortController();
+
+        try {
+            const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
+
+            // Suggest (не блокирует)
+            try {
+                const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(effectiveQuestion)}`);
+                const suggestData = await suggestRes.json();
+                if (suggestData?.level) elements.suggestLevel.textContent = suggestData.level;
+            } catch {}
+
+            await sendNormalMessage(effectiveQuestion, level, txHash, filesPayload);
+
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                removeTypingIndicator();
+                addErrorMessage(error.message);
+            }
+        } finally {
+            if (elements.progressBar) elements.progressBar.style.display = 'none';
+            elements.sendBtn.style.display = 'flex';
+            elements.stopBtn.style.display = 'none';
+            elements.sendBtn.disabled = false;
+            abortController = null;
+            removeAttachedFile();
+        }
+
+    } finally {
+        window.__askInProgress = false;
+    }
+}
+
+async function sendNormalMessage(question, level, txHash, filesPayload) {
     const provider = getSelectedProvider();
 
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
@@ -535,9 +743,9 @@ async function sendNormalMessage(question, level, txHash) {
             question,
             level,
             provider,
-            tx_hash: txHash,
+            tx_hash: txHash || undefined,
             history: history.slice(-10),
-            ...(files.length ? { files } : {})
+            ...(filesPayload.length ? { files: filesPayload } : {})
         })
     });
 
@@ -546,8 +754,7 @@ async function sendNormalMessage(question, level, txHash) {
         if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
         if (response.status === 429) {
             const msg = error.limit
-                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.
-Обновится в полночь UTC.`
+                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.`
                 : error.error;
             throw new Error(msg);
         }
@@ -567,219 +774,15 @@ async function sendNormalMessage(question, level, txHash) {
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-    removeAttachedFile();
 }
 
-
-
-async function sendStreamMessage(question, level, txHash) {
-    const files = await filesToPayload();
-    const provider = getSelectedProvider();
-
-    const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
-        method: 'POST',
-        signal: abortController.signal,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        body: JSON.stringify({
-            question,
-            level,
-            provider,
-            tx_hash: txHash,
-            history: history.slice(-10),
-            stream: true,
-            ...(files.length ? { files } : {})
-        })
-    });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: response.statusText }));
-        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
-        if (response.status === 429) {
-            const msg = error.limit
-                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.
-Обновится в полночь UTC.`
-                : error.error;
-            throw new Error(msg);
-        }
-        throw new Error(error.error || 'Request failed');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let answer = '';
-    let buffer = '';
-
-    removeTypingIndicator();
-    const messageId = addAssistantMessage('', null, level);
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const dataStr = line.slice(5).trim();
-            if (!dataStr) continue;
-            try {
-                const data = JSON.parse(dataStr);
-                if (data.chunk) {
-                    answer += data.chunk;
-                    updateAssistantMessage(messageId, answer);
-                }
-                if (data.done) {
-                    if (data.crystal) {
-                        crystals.unshift({ id: Date.now(), ...data.crystal });
-                        renderCrystals();
-                        updateStats();
-                    }
-                    finalizeAssistantMessage(messageId, data.crystal);
-                    history.push({ role: 'user', content: question });
-                    history.push({ role: 'assistant', content: answer });
-                    sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-                    removeAttachedFile();
-                }
-                if (data.error) throw new Error(data.error);
-            } catch (e) {
-                if (e.message && !e.message.includes('JSON')) throw e;
-            }
-        }
-    }
-}
-
+// ============================================================
+// UI Компоненты
+// ============================================================
 
 function stopGeneration() {
     if (abortController) {
         abortController.abort();
-    }
-}
-
-async function processPayment(level, price, ownerWallet) {
-    if (!price || price <= 0) return null;
-
-    if (!ownerWallet) {
-        showNotification('❌ Адрес получателя не задан', 'error');
-        return null;
-    }
-
-    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-        showNotification('❌ Некорректный адрес получателя', 'error');
-        return null;
-    }
-
-    if (!wallet) {
-        await connectWallet();
-        if (!wallet) return null;
-    }
-
-    const confirmed = confirm(
-        `💳 Оплата уровня ${level}\n\n` +
-        `Сумма: ${price} USDC\n` +
-        `Сеть: Polygon\n` +
-        `Получатель: ${ownerWallet}\n\n` +
-        `Продолжить?`
-    );
-    if (!confirmed) return null;
-
-    try {
-        try {
-            await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x89' }]
-            });
-        } catch (switchError) {
-            if (switchError.code === 4902) {
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: '0x89',
-                        chainName: 'Polygon',
-                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                        rpcUrls: ['https://polygon-rpc.com'],
-                        blockExplorerUrls: ['https://polygonscan.com']
-                    }]
-                });
-            } else {
-                throw switchError;
-            }
-        }
-
-        const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.round(Number(price) * 1e6);
-        const amountHex = usdcAmount.toString(16).padStart(64, '0');
-        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
-        const data = '0xa9059cbb' + recipientHex + amountHex;
-
-        const txHash = await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [{
-                from: wallet,
-                to: USDC_CONTRACT,
-                value: '0x0',
-                data
-            }]
-        });
-
-        showNotification('⏳ Ожидание подтверждения...', 'info');
-
-        if (!token) {
-            throw new Error('Требуется авторизация перед подтверждением оплаты');
-        }
-
-        let confirmData = null;
-        let confirmRes = null;
-
-        for (let i = 0; i < 3; i++) {
-            await new Promise(r => setTimeout(r, 6000));
-
-            confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    tx_hash: txHash,
-                    level
-                })
-            });
-
-            confirmData = await confirmRes.json().catch(() => ({}));
-
-            if (confirmRes.ok && (confirmData.success || confirmData.reused)) {
-                showNotification('✅ Платёж подтверждён', 'success');
-                return txHash;
-            }
-
-            if (confirmRes.status === 401) {
-                throw new Error('Сессия истекла. Войдите заново.');
-            }
-
-            if (confirmRes.status === 409) {
-                throw new Error(confirmData?.error || 'Транзакция уже использована');
-            }
-
-            if (confirmRes.status !== 402) {
-                break;
-            }
-        }
-
-        throw new Error(confirmData?.error || 'Payment confirm failed');
-
-    } catch (error) {
-        if (error.code === 4001) {
-            showNotification('Платёж отменён', 'info');
-        } else {
-            showNotification('❌ Ошибка оплаты: ' + error.message, 'error');
-        }
-        return null;
     }
 }
 
@@ -943,15 +946,8 @@ function finalizeAssistantMessage(id, crystal) {
     }
 }
 
-
 // ============================================================
-// v5.0: Debounce [F11]
-// ============================================================
-// debounce определён выше
-
-// Применяем debounce к input
-// ============================================================
-// УТИЛИТЫ — escapeHtml, showNotification, scrollToBottom, etc.
+// Утилиты
 // ============================================================
 
 function escapeHtml(text) {
@@ -967,22 +963,17 @@ function escapeHtml(text) {
 function formatMessage(text) {
     if (!text) return '';
     text = escapeHtml(text);
-    // Заголовки
     text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
     text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
     text = text.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-    // Bold и italic
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Code
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Списки
     text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
     text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
     text = text.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
     text = text.replace(/(<oli>.*<\/oli>)/gs, '<ol>$1</ol>');
     text = text.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
-    // Переносы строк (не внутри тегов)
     text = text.replace(/\n/g, '<br>');
     return text;
 }
@@ -1041,10 +1032,8 @@ function showCrystal(crystalId) {
     const crystal = crystals.find(c => String(c.id) === String(crystalId));
     if (!crystal) return;
 
-    // Показываем кристалл в чате
     removeWelcomeMessage();
 
-    // Добавляем вопрос
     const userDiv = document.createElement('div');
     userDiv.className = 'message user';
     userDiv.innerHTML = `
@@ -1055,7 +1044,6 @@ function showCrystal(crystalId) {
     `;
     elements.messages.appendChild(userDiv);
 
-    // Добавляем ответ
     const msgId = 'crystal_' + crystalId + '_' + Date.now();
     const assistantDiv = document.createElement('div');
     assistantDiv.className = 'message assistant';
@@ -1082,7 +1070,6 @@ function showCrystal(crystalId) {
     elements.messages.appendChild(assistantDiv);
     scrollToBottom();
 
-    // Закрываем sidebar на мобиле
     if (window.innerWidth <= 768) {
         document.getElementById('sidebar')?.classList.remove('show');
         document.getElementById('sidebarOverlay')?.classList.remove('show');
@@ -1093,16 +1080,10 @@ function applyLevel(level) {
     if (elements.levelSelect) elements.levelSelect.value = level;
 }
 
-// openSettings — определена ниже с loadSavedKeys
+// ============================================================
+// Настройки
+// ============================================================
 
-
-document.addEventListener('DOMContentLoaded', () => {
-    checkTermsAgreement();
-    init();
-    loadLevelOptions(); // загружаем актуальные цены в селект
-});
-
-// Загружает актуальные цены/лимиты из API и обновляет селект уровней
 async function loadLevelOptions() {
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/levels`);
@@ -1125,99 +1106,6 @@ async function loadLevelOptions() {
     } catch { /* оставляем статичные опции из HTML */ }
 }
 
-// ============================================================
-// v5.0: Пользовательское соглашение
-// ============================================================
-const TERMS_VERSION = 'v5.0-2026-03-11';
-
-async function loadTerms(lang = 'ru') {
-    const termsContent = document.getElementById('termsContent');
-    if (!termsContent) return;
-    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(lang === 'ru' ? 'langRu' : 'langEn').classList.add('active');
-    try {
-        const response = await fetch(`docs/TERMS_OF_USE${lang === 'en' ? '_EN' : ''}.md`);
-        if (!response.ok) throw new Error('Failed to load terms');
-        let text = await response.text();
-        text = text
-            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/^- (.*)$/gm, '<li>$1</li>')
-            .replace(/\n\n/g, '<br>');
-        termsContent.innerHTML = text;
-    } catch (error) {
-        termsContent.innerHTML = '<div style="color:var(--error);text-align:center;padding:20px;">❌ Ошибка загрузки соглашения.</div>';
-    }
-}
-
-function checkTermsAgreement() {
-    const accepted = localStorage.getItem('terms_accepted');
-    const version  = localStorage.getItem('terms_version');
-    if (!accepted || version !== TERMS_VERSION) showTermsModal();
-}
-
-function showTermsModal() {
-    const modal    = document.getElementById('termsModal');
-    const overlay  = document.getElementById('termsOverlay');
-    const checkbox = document.getElementById('termsAgreeCheckbox');
-    const acceptBtn = document.getElementById('termsAcceptBtn');
-    if (modal && overlay) {
-        modal.style.display = 'flex';
-        overlay.style.display = 'block';
-        if (checkbox) { checkbox.checked = false; acceptBtn.disabled = true; }
-        document.body.style.overflow = 'hidden';
-        loadTerms('ru');
-
-        checkbox?.addEventListener('change', function() {
-            acceptBtn.disabled = !this.checked;
-        });
-    }
-}
-
-function hideTermsModal() {
-    const modal   = document.getElementById('termsModal');
-    const overlay = document.getElementById('termsOverlay');
-    if (modal && overlay) {
-        modal.style.display = 'none';
-        overlay.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-}
-
-function acceptTerms() {
-    localStorage.setItem('terms_accepted', 'true');
-    localStorage.setItem('terms_version', TERMS_VERSION);
-    localStorage.setItem('terms_date', new Date().toISOString());
-    hideTermsModal();
-    if (typeof showNotification === 'function') showNotification('✅ Соглашение принято', 'success');
-}
-
-function declineTerms() {
-    window.location.href = 'https://google.com';
-}
-
-// ============================================================
-// handleInput — обновляет рекомендуемый уровень при вводе
-// ============================================================
-async function handleInput() {
-    const question = document.getElementById('userInput')?.value?.trim();
-    if (!question || question.length < 3) return;
-    try {
-        const res = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(question)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const el = document.getElementById('suggestLevel');
-        if (el && data.level) el.textContent = data.level;
-    } catch { /* silent */ }
-}
-
-// ============================================================
-// SETTINGS — closeSettings, saveSettings, loadSavedKeys
-// ============================================================
-
 function closeSettings() {
     const modal = document.getElementById('settingsModal');
     if (modal) modal.style.display = 'none';
@@ -1229,11 +1117,9 @@ async function saveSettings() {
     const archKey     = document.getElementById('architectKey')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
-    // Сохраняем локально
     if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
-    // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
     if (apiKey && token) {
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/auth/keys/${provider}`, {
@@ -1256,7 +1142,6 @@ async function saveSettings() {
             showNotification('❌ Нет связи с сервером', 'error');
         }
     } else if (apiKey) {
-        // Без авторизации — только в sessionStorage
         sessionStorage.setItem('brain_api_key', apiKey);
         CONFIG.API_KEY = apiKey;
         showNotification('✅ Ключ сохранён локально (подключите кошелёк для сохранения на сервер)', 'info');
@@ -1310,11 +1195,9 @@ async function deleteKey(provider) {
     }
 }
 
-// Показать текущие значения при открытии настроек
 openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
-    // Заполнить поля текущими значениями
     const su = document.getElementById('serverUrl');
     if (su) su.value = CONFIG.API_URL || '';
     modal.style.display = 'flex';
@@ -1322,7 +1205,7 @@ openSettings = function() {
 };
 
 // ============================================================
-// THEME — toggleTheme
+// Тема
 // ============================================================
 
 function toggleTheme() {
@@ -1334,14 +1217,9 @@ function toggleTheme() {
     CONFIG.THEME = next;
 }
 
-// ============================================================
-// HISTORY — clearHistory
-// ============================================================
-
 function clearHistory() {
     const messages = elements.messages;
     if (!messages) return;
-    // Оставляем только welcome-message
     const welcome = document.getElementById('welcomeMessage');
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
@@ -1352,10 +1230,6 @@ function clearHistory() {
     sessionStorage.removeItem('brain_history');
     showNotification('🗑️ История очищена', 'info');
 }
-
-// ============================================================
-// SUGGEST — applySuggestedLevel
-// ============================================================
 
 function applySuggestedLevel() {
     const suggestEl = document.getElementById('suggestLevel');
@@ -1369,7 +1243,7 @@ function applySuggestedLevel() {
 }
 
 // ============================================================
-// WEBSOCKET — подключение и live-обновления кристаллов
+// WebSocket
 // ============================================================
 
 let ws = null;
@@ -1395,11 +1269,9 @@ function connectWebSocket() {
     ws.onopen = () => {
         wsReconnectAttempts = 0;
         setWsIndicator('connected');
-        // Авторизуемся если есть токен
         if (token) {
             ws.send(JSON.stringify({ type: 'auth', token }));
         }
-        // Подписываемся на обновления кристаллов
         ws.send(JSON.stringify({ type: 'subscribe', channel: 'crystals' }));
     };
 
@@ -1414,7 +1286,6 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         setWsIndicator('error');
-        // Реконнект с экспоненциальной задержкой, макс 30с
         const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
         wsReconnectAttempts++;
         wsReconnectTimer = setTimeout(connectWebSocket, delay);
@@ -1423,9 +1294,7 @@ function connectWebSocket() {
 
 function handleWsMessage(msg) {
     switch (msg.type) {
-        case 'welcome':
-            // Сервер приветствует — ничего
-            break;
+        case 'welcome': break;
         case 'auth':
             if (msg.status === 'success' && msg.role === 'architect') {
                 isArchitect = true;
@@ -1433,12 +1302,9 @@ function handleWsMessage(msg) {
             }
             break;
         case 'crystal:update':
-            // Живое обновление — перезагружаем список
             loadCrystals();
             break;
-        case 'pong':
-            // heartbeat OK
-            break;
+        case 'pong': break;
         case 'error':
             console.warn('WS error:', msg.message);
             break;
@@ -1459,27 +1325,22 @@ function setWsIndicator(state) {
     el.className = `ws-indicator ${s.cls}`;
 }
 
-// WS heartbeat — пингуем каждые 25с чтобы соединение не закрылось
 setInterval(() => {
     if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));
     }
 }, 25000);
 
-// ============================================================
-// INIT — патч: добавить WS + openSettings после загрузки
-// ============================================================
 const _origInit = init;
 init = async function() {
     await _origInit();
-    // Запускаем WS если есть API_URL
     if (CONFIG.API_URL) {
         connectWebSocket();
     }
 };
 
 // ============================================================
-// 👑 КАБИНЕТ АРХИТЕКТОРА
+// Админ-панель (архитектор)
 // ============================================================
 
 function openAdminPanel() {
@@ -1631,7 +1492,7 @@ async function loadAdminUsers(search = '', blocked = '') {
                 </td>
             </tr>`).join('')}
             </tbody>
-        <tr></div>`;
+        </table></div>`;
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
@@ -1752,7 +1613,7 @@ async function loadAdminAttacks() {
         <div class="admin-section-title" style="margin-top:16px">🔒 Заблокированные IP</div>
         <div class="admin-table-wrap">
         <table class="admin-table">
-            <thead><tr><th>IP</th><th>Причина</th><th>До</th><th></th></tr></thead>
+            <thead><tr><th>IP</th><th>Причина</th><th>До</th><th></th><tr></thead>
             <tbody>${d.blocked_ips.length ? d.blocked_ips.map(b => `
             <tr>
                 <td><code>${b.ip}</code></td>
@@ -2009,7 +1870,6 @@ async function adminSaveLevel(level) {
         });
 
         if (row) row.style.opacity = '1';
-        // Обновляем селект уровней в основном интерфейсе
         updateLevelSelect(level, parseFloat(price));
     } catch(e) {
         alert('Ошибка: ' + e.message);
@@ -2018,7 +1878,6 @@ async function adminSaveLevel(level) {
     }
 }
 
-// Обновляем подписи в главном селекте уровней после изменения цены
 function updateLevelSelect(level, price) {
     const opt = document.querySelector(`#levelSelect option[value="${level}"]`);
     if (!opt) return;
@@ -2027,7 +1886,7 @@ function updateLevelSelect(level, price) {
 }
 
 // ============================================================
-// 👤 ЛИЧНЫЙ КАБИНЕТ ПОЛЬЗОВАТЕЛЯ
+// Личный кабинет
 // ============================================================
 
 async function openProfile() {
@@ -2057,7 +1916,6 @@ async function loadProfile() {
         const p = d.profile;
         const c = d.crystals;
 
-        // Дневные лимиты
         const limitsHtml = Object.entries(d.limits || {}).map(([lvl, l]) => {
             const pct = Math.round(l.used / l.limit * 100);
             const color = pct >= 100 ? '#f87171' : pct >= 70 ? '#fbbf24' : '#4ade80';
@@ -2071,7 +1929,6 @@ async function loadProfile() {
             </div>`;
         }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
 
-        // История платежей
         const paymentsHtml = d.payments.length
             ? d.payments.map(p => `
             <div class="profile-payment-row">
@@ -2088,7 +1945,6 @@ async function loadProfile() {
         body.innerHTML = `
         <div class="profile-grid">
 
-            <!-- Профиль -->
             <div class="profile-card">
                 <div class="profile-wallet">
                     <span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span>
@@ -2118,7 +1974,6 @@ async function loadProfile() {
                 </div>
             </div>
 
-            <!-- Кристаллы -->
             <div class="profile-card">
                 <div class="profile-card-title">💎 Мои кристаллы</div>
                 <div class="profile-crystals-grid">
@@ -2149,14 +2004,12 @@ async function loadProfile() {
                 </div>
             </div>
 
-            <!-- Дневные лимиты -->
             <div class="profile-card">
                 <div class="profile-card-title">📊 Лимиты сегодня</div>
                 <div class="profile-limits">${limitsHtml}</div>
                 <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
             </div>
 
-            <!-- История платежей -->
             <div class="profile-card profile-card-wide">
                 <div class="profile-card-title">💰 История платежей</div>
                 <div class="profile-payments">${paymentsHtml}</div>
@@ -2169,8 +2022,6 @@ async function loadProfile() {
     }
 }
 
-
-// ─── РЕЖИМ ФИЛЬТРАЦИИ ────────────────────────────────────────
 async function adminSetFilterMode(mode) {
     const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
     if (!confirm(`Установить режим фильтрации: ${labels[mode]}?`)) return;
@@ -2207,3 +2058,96 @@ function highlightFilterMode(mode) {
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => showNotification(currentLang === 'ru' ? '📋 Скопировано' : '📋 Copied', 'success'));
 }
+
+// ============================================================
+// Пользовательское соглашение
+// ============================================================
+
+const TERMS_VERSION = 'v5.0-2026-03-11';
+
+async function loadTerms(lang = 'ru') {
+    const termsContent = document.getElementById('termsContent');
+    if (!termsContent) return;
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(lang === 'ru' ? 'langRu' : 'langEn').classList.add('active');
+    try {
+        const response = await fetch(`docs/TERMS_OF_USE${lang === 'en' ? '_EN' : ''}.md`);
+        if (!response.ok) throw new Error('Failed to load terms');
+        let text = await response.text();
+        text = text
+            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/^- (.*)$/gm, '<li>$1</li>')
+            .replace(/\n\n/g, '<br>');
+        termsContent.innerHTML = text;
+    } catch (error) {
+        termsContent.innerHTML = '<div style="color:var(--error);text-align:center;padding:20px;">❌ Ошибка загрузки соглашения.</div>';
+    }
+}
+
+function checkTermsAgreement() {
+    const accepted = localStorage.getItem('terms_accepted');
+    const version  = localStorage.getItem('terms_version');
+    if (!accepted || version !== TERMS_VERSION) showTermsModal();
+}
+
+function showTermsModal() {
+    const modal    = document.getElementById('termsModal');
+    const overlay  = document.getElementById('termsOverlay');
+    const checkbox = document.getElementById('termsAgreeCheckbox');
+    const acceptBtn = document.getElementById('termsAcceptBtn');
+    if (modal && overlay) {
+        modal.style.display = 'flex';
+        overlay.style.display = 'block';
+        if (checkbox) { checkbox.checked = false; acceptBtn.disabled = true; }
+        document.body.style.overflow = 'hidden';
+        loadTerms('ru');
+
+        checkbox?.addEventListener('change', function() {
+            acceptBtn.disabled = !this.checked;
+        });
+    }
+}
+
+function hideTermsModal() {
+    const modal   = document.getElementById('termsModal');
+    const overlay = document.getElementById('termsOverlay');
+    if (modal && overlay) {
+        modal.style.display = 'none';
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+function acceptTerms() {
+    localStorage.setItem('terms_accepted', 'true');
+    localStorage.setItem('terms_version', TERMS_VERSION);
+    localStorage.setItem('terms_date', new Date().toISOString());
+    hideTermsModal();
+    if (typeof showNotification === 'function') showNotification('✅ Соглашение принято', 'success');
+}
+
+function declineTerms() {
+    window.location.href = 'https://google.com';
+}
+
+async function handleInput() {
+    const question = document.getElementById('userInput')?.value?.trim();
+    if (!question || question.length < 3) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(question)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const el = document.getElementById('suggestLevel');
+        if (el && data.level) el.textContent = data.level;
+    } catch { /* silent */ }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    checkTermsAgreement();
+    init();
+    loadLevelOptions();
+});
