@@ -16,8 +16,9 @@
         [class*="server-url"], [class*="api-url"] { display: none !important; }
         .sidebar a[href*="railway"], .sidebar a[href*="up.railway"] { display: none !important; }
 
+        /* Кнопка открытия сайдбара — только на мобиле */
         .sidebar-toggle {
-            display: none; /* скрыта на десктопе */
+            display: none;
             background: var(--surface-2-dark);
             border: 1px solid var(--border-dark);
             border-radius: 6px;
@@ -29,33 +30,56 @@
             justify-content: center;
         }
 
+        /* Сайдбар — на ПК всегда открыт, на мобиле скрыт */
         .sidebar {
             position: fixed;
             left: 0;
             top: 60px;
             bottom: 0;
-            transform: translateX(-100%);
-            transition: transform 0.2s ease;
-            z-index: 1000;
             width: 280px;
             background: var(--surface-dark);
             border-right: 1px solid var(--border-dark);
+            z-index: 1000;
+            overflow-y: auto;
+            transition: transform 0.2s ease;
         }
-        .sidebar.show { transform: translateX(0); }
+
+        /* На мобильных устройствах — скрыт по умолчанию */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.show {
+                transform: translateX(0);
+            }
+        }
+
+        /* На десктопе — всегда открыт */
+        @media (min-width: 769px) {
+            .sidebar {
+                transform: translateX(0) !important;
+            }
+            .sidebar-toggle {
+                display: none !important;
+            }
+            .main-container {
+                margin-left: 280px;
+            }
+        }
 
         .sidebar-overlay {
             position: fixed;
-            top: 60px; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(2px);
             z-index: 999;
             display: none;
         }
-        .sidebar-overlay.show { display: block; }
-
-        @media (min-width: 769px) {
-            .sidebar-toggle { display: flex !important; }
-            .main-container { margin-left: 0; }
+        .sidebar-overlay.show {
+            display: block;
         }
     </style>
 </head>
@@ -505,7 +529,7 @@
     }
     function triggerFileUpload() { updateFileAccept(); document.getElementById('fileInput').click(); }
     
-function handleFileSelect(e) {
+    function handleFileSelect(e) {
         const files = Array.from(e.target.files || []);
         if (!files.length) return;
 
@@ -541,15 +565,13 @@ function handleFileSelect(e) {
         }
     }
 
-    
-function removeAttachedFile() {
+    function removeAttachedFile() {
         window.attachedFiles = [];
         window.attachedFile = null;
         document.getElementById('filePreview').style.display = 'none';
         document.getElementById('fileInput').value = '';
         document.getElementById('attachBtn').classList.remove('has-file');
     }
-
 
     updateFileAccept();
     </script>
