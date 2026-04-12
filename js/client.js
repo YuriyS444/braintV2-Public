@@ -1,6 +1,3 @@
-// currentLang — берётся из index.html (window.currentLang) или определяется здесь
-const currentLang = window.currentLang || (navigator.language?.startsWith('ru') ? 'ru' : 'en');
-
 const CONFIG = {
     API_URL: sessionStorage.getItem('brain_api_url') || localStorage.getItem('brain_api_url') || 'https://braintv2-private-production.up.railway.app',
     API_KEY: sessionStorage.getItem('brain_api_key') || '',
@@ -41,7 +38,7 @@ const elements = {
     statDiamonds: document.getElementById('statDiamonds'),
     statVerified: document.getElementById('statVerified'),
     statVirus: document.getElementById('statVirus'),
-    progressBar: document.getElementById('progressBar')
+    progressBar: document.querySelector('.progress-bar')
 };
 
 
@@ -352,20 +349,12 @@ function importCrystals() {
     input.click();
 }
 
-
 async function sendMessage() {
     const question = elements.userInput.value.trim();
-    const files = getAttachedFiles();
-    const provider = getSelectedProvider();
-
-    if (!question && !files.length) return;
-
+    if (!question) return;
+    
     if (!CONFIG.API_URL) {
         openSettings();
-        return;
-    }
-
-    if (!validateAttachedFilesForProvider(files, provider)) {
         return;
     }
 
@@ -374,163 +363,77 @@ async function sendMessage() {
         await login();
         if (!token) return;
     }
-
-    const useStream = false; // Stream отключён
-
+    const useStream = elements.streamToggle.checked;
+    
     elements.userInput.value = '';
     autoResize(elements.userInput);
-
-    addUserMessage(question || (files.length === 1 ? `📎 ${files[0].name}` : `📎 Файлов: ${files.length}`));
+    
+    addUserMessage(question);
     addTypingIndicator();
-
-    if (elements.progressBar) elements.progressBar.style.display = 'block';
+    
+    if (elements.progressBar) {
+        elements.progressBar.style.display = 'block';
+    }
+    
     elements.sendBtn.style.display = 'none';
     elements.stopBtn.style.display = 'flex';
+    
     abortController = new AbortController();
-
+    
     try {
         let txHash = null;
-        let price = 0;
-        let ownerWallet = CONFIG.OWNER_WALLET;
-
+        // Получаем актуальный конфиг уровней из API (цены управляются архитектором)
+        let levelConfig = {};
         try {
             const cfgRes = await fetch(`${CONFIG.API_URL}/api/levels`);
             const cfgData = await cfgRes.json();
-            const levels = cfgData.levels || {};
-            price = parseFloat(levels[level]?.price || 0);
-            if (cfgData.owner_wallet) {
-                ownerWallet = cfgData.owner_wallet;
-                CONFIG.OWNER_WALLET = ownerWallet;
-            }
-        } catch {}
+            levelConfig = cfgData.levels || {};
+        } catch { /* fallback — используем дефолтные цены */ }
 
-        if (files.length) {
-            showNotification(files.length === 1 ? `📎 Отправка файла: ${files[0].name}...` : `📎 Отправка файлов: ${files.length}...`, 'info');
-        }
+        const cfg = levelConfig[level] || {};
+        const price = parseFloat(cfg.price || 0);
 
+        // Платим только если цена > 0 и пользователь не архитектор
         if (price > 0 && !isArchitect) {
-            if (!ownerWallet) {
-                showNotification('❌ Адрес получателя не загружен', 'error');
-                removeTypingIndicator();
-                return;
-            }
-            txHash = await processPayment(level, price, ownerWallet);
+            txHash = await processPayment(level, price);
             if (!txHash) {
                 removeTypingIndicator();
+                if (elements.progressBar) elements.progressBar.style.display = 'none';
+                elements.sendBtn.style.display = 'flex';
+                elements.stopBtn.style.display = 'none';
                 return;
             }
         }
-
+        
         try {
-            const suggestQuery = question || 'Анализ прикреплённых файлов';
-            const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(suggestQuery)}`);
+            const suggestRes = await fetch(`${CONFIG.API_URL}/api/suggest?q=${encodeURIComponent(question)}`);
             const suggestData = await suggestRes.json();
-            if (suggestData?.level) elements.suggestLevel.textContent = suggestData.level;
-        } catch {}
-
-        const effectiveQuestion = question || 'Проанализируй прикреплённые файлы и дай краткий структурированный ответ на русском языке.';
-
-        if (useStream) {
-            await sendNormalMessage(effectiveQuestion, level, txHash);
-        } else {
-            await sendNormalMessage(effectiveQuestion, level, txHash);
+            elements.suggestLevel.textContent = suggestData.level;
+        } catch (error) {
         }
+        
+        if (useStream) {
+            await sendStreamMessage(question, level, txHash);
+        } else {
+            await sendNormalMessage(question, level, txHash);
+        }
+        
     } catch (error) {
         if (error.name !== 'AbortError') {
             removeTypingIndicator();
             addErrorMessage(error.message);
         }
     } finally {
-        if (elements.progressBar) elements.progressBar.style.display = 'none';
+        if (elements.progressBar) {
+            elements.progressBar.style.display = 'none';
+        }
         elements.sendBtn.style.display = 'flex';
         elements.stopBtn.style.display = 'none';
         abortController = null;
-        // Очищаем файлы в любом случае (успех или ошибка)
-        if (typeof removeAttachedFile === 'function') removeAttachedFile();
     }
 }
-
-
-
-
-// ── Файлы: прод-режим ────────────────────────────────────────
-window.attachedFiles = window.attachedFiles || [];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
-
-function getAttachedFiles() {
-    return Array.isArray(window.attachedFiles) ? window.attachedFiles : [];
-}
-
-function getSelectedProvider() {
-    return elements.providerSelect?.value || CONFIG.PROVIDER || 'auto';
-}
-
-function validateAttachedFilesForProvider(files, provider) {
-    if (!files.length) return true;
-
-    const totalSize = files.reduce((sum, f) => sum + (f?.size || 0), 0);
-    if (totalSize > MAX_TOTAL_SIZE) {
-        showNotification(`❌ Общий размер файлов слишком большой: ${(totalSize / 1024 / 1024).toFixed(1)}MB. Максимум 20MB.`, 'error');
-        return false;
-    }
-
-    for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-            showNotification(`❌ Файл слишком большой: ${file.name}. Максимум 5MB.`, 'error');
-            return false;
-        }
-        const isImage = String(file.type || '').startsWith('image/');
-        const isPdf = file.type === 'application/pdf';
-        if ((isImage || isPdf) && provider === 'deepseek') {
-            showNotification('⚠️ Для изображений и PDF выберите Claude, GPT или Gemini', 'warning');
-            return false;
-        }
-    }
-    return true;
-}
-
-async function filesToPayload() {
-    const files = getAttachedFiles();
-    if (!files.length) return [];
-    const result = [];
-    for (const file of files) {
-        const f = await fileToBase64(file);
-        if (!f) throw new Error(`Ошибка обработки файла: ${file.name}`);
-        result.push(f);
-    }
-    return result;
-}
-
-// ── Конвертация файла в base64 для отправки ──────────────────
-
-
-async function fileToBase64(file) {
-    if (!file) return null;
-
-    if (file.size > MAX_FILE_SIZE) {
-        showNotification(`❌ Файл слишком большой: ${(file.size/1024/1024).toFixed(1)}MB. Максимум 5MB.`, 'error');
-        return null;
-    }
-
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = reader.result || '';
-            const base64 = String(result).includes(',') ? String(result).split(',')[1] : String(result);
-            resolve({ name: file.name, type: file.type, data: base64, size: file.size });
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
-
-
 
 async function sendNormalMessage(question, level, txHash) {
-    const files = await filesToPayload();
-    const provider = getSelectedProvider();
-
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
         signal: abortController.signal,
@@ -542,48 +445,50 @@ async function sendNormalMessage(question, level, txHash) {
         body: JSON.stringify({
             question,
             level,
-            provider,
+            provider: CONFIG.PROVIDER,
             tx_hash: txHash,
-            history: history.slice(-10),
-            ...(files.length ? { files } : {})
+            history: history.slice(-10)
         })
     });
-
+    
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
-        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
+
+        // Лимит исчерпан
         if (response.status === 429) {
             const msg = error.limit
-                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.
-Обновится в полночь UTC.`
+                ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/day.\nResets at midnight UTC.`)
                 : error.error;
             throw new Error(msg);
         }
+
+        // Требуется оплата (не должно случаться т.к. мы уже платим, но на всякий случай)
+        if (response.status === 402) {
+            throw new Error(`Требуется оплата: $${error.price} для уровня ${error.level}`);
+        }
+
         throw new Error(error.error || 'Request failed');
     }
-
+    
     const data = await response.json();
     removeTypingIndicator();
     addAssistantMessage(data.answer, data.crystal, data.level, data.suggestedLevel);
-
+    
     if (data.crystal) {
-        crystals.unshift({ id: Date.now(), ...data.crystal });
+        crystals.unshift({
+            id: Date.now(),
+            ...data.crystal
+        });
         renderCrystals();
         updateStats();
     }
-
+    
     history.push({ role: 'user', content: question });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-    removeAttachedFile();
 }
 
-
-
 async function sendStreamMessage(question, level, txHash) {
-    const files = await filesToPayload();
-    const provider = getSelectedProvider();
-
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
         signal: abortController.signal,
@@ -595,73 +500,79 @@ async function sendStreamMessage(question, level, txHash) {
         body: JSON.stringify({
             question,
             level,
-            provider,
+            provider: CONFIG.PROVIDER,
             tx_hash: txHash,
             history: history.slice(-10),
-            stream: true,
-            ...(files.length ? { files } : {})
+            stream: true
         })
     });
-
+    
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: response.statusText }));
-        if (response.status === 402) throw new Error(`Требуется оплата: ${error.error || 'Payment required'}`);
-        if (response.status === 429) {
-            const msg = error.limit
-                ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.
-Обновится в полночь UTC.`
-                : error.error;
-            throw new Error(msg);
-        }
         throw new Error(error.error || 'Request failed');
     }
-
+    
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    
     let answer = '';
     let buffer = '';
-
-    removeTypingIndicator();
+    
     const messageId = addAssistantMessage('', null, level);
-
+    
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
+        
         buffer += decoder.decode(value, { stream: true });
+        
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
-
+        
         for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const dataStr = line.slice(5).trim();
-            if (!dataStr) continue;
-            try {
-                const data = JSON.parse(dataStr);
-                if (data.chunk) {
-                    answer += data.chunk;
-                    updateAssistantMessage(messageId, answer);
-                }
-                if (data.done) {
-                    if (data.crystal) {
-                        crystals.unshift({ id: Date.now(), ...data.crystal });
-                        renderCrystals();
-                        updateStats();
+            if (line.startsWith('data:')) {
+                const dataStr = line.slice(5).trim();
+                if (!dataStr) continue;
+                
+                try {
+                    const data = JSON.parse(dataStr);
+                    
+                    if (data.chunk) {
+                        answer += data.chunk;
+                        updateAssistantMessage(messageId, answer);
                     }
-                    finalizeAssistantMessage(messageId, data.crystal);
-                    history.push({ role: 'user', content: question });
-                    history.push({ role: 'assistant', content: answer });
-                    sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-                    removeAttachedFile();
+                    
+                    if (data.done) {
+                        removeTypingIndicator();
+                        
+                        if (data.crystal) {
+                            crystals.unshift({
+                                id: Date.now(),
+                                ...data.crystal
+                            });
+                            renderCrystals();
+                            updateStats();
+                        }
+                        
+                        finalizeAssistantMessage(messageId, data.crystal);
+                        history.push({ role: 'user', content: question });
+                        history.push({ role: 'assistant', content: answer });
+                        sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
+                    }
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                } catch (e) {
+                    if (e.message && !e.message.includes('JSON')) {
+                        throw e;
+                    }
                 }
-                if (data.error) throw new Error(data.error);
-            } catch (e) {
-                if (e.message && !e.message.includes('JSON')) throw e;
             }
         }
     }
 }
-
 
 function stopGeneration() {
     if (abortController) {
@@ -669,7 +580,7 @@ function stopGeneration() {
     }
 }
 
-async function processPayment(level, price, ownerWallet) {
+async function processPayment(level, price) {
     if (!price || price <= 0) return null;
 
     if (!wallet) {
@@ -677,8 +588,17 @@ async function processPayment(level, price, ownerWallet) {
         if (!wallet) return null;
     }
 
-    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-        showNotification('❌ Некорректный адрес получателя', 'error');
+    // Если кошелёк получателя не загружен — загружаем сейчас
+    if (!CONFIG.OWNER_WALLET) {
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/levels`);
+            const data = await res.json();
+            if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
+        } catch {}
+    }
+
+    if (!CONFIG.OWNER_WALLET) {
+        showNotification('❌ Ошибка: адрес получателя не загружен', 'error');
         return null;
     }
 
@@ -686,37 +606,46 @@ async function processPayment(level, price, ownerWallet) {
         `💳 Оплата уровня ${level}\n\n` +
         `Сумма: ${price} USDC\n` +
         `Токен: USDC (Polygon)\n` +
-        `Получатель: ${ownerWallet}\n\n` +
+        `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
         `После оплаты ответ будет получен автоматически.\nПродолжить?`
     );
     if (!confirmed) return null;
 
     try {
-        // Переключаемся на Polygon
+        // Переключаемся на Polygon перед оплатой
         try {
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x89' }]
+                params: [{ chainId: '0x89' }] // Polygon Mainnet
             });
         } catch (switchError) {
             if (switchError.code === 4902) {
                 await window.ethereum.request({
                     method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: '0x89',
-                        chainName: 'Polygon',
-                        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
-                        rpcUrls: ['https://polygon-rpc.com'],
-                        blockExplorerUrls: ['https://polygonscan.com']
-                    }]
+                    params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
                 });
             }
         }
 
+        // Убеждаемся что кошелёк получателя загружен
+        if (!CONFIG.OWNER_WALLET) {
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/levels`);
+                const data = await res.json();
+                if (data.owner_wallet) CONFIG.OWNER_WALLET = data.owner_wallet;
+            } catch {}
+        }
+        if (!CONFIG.OWNER_WALLET) {
+            showNotification('❌ Кошелёк получателя не загружен. Попробуйте позже.', 'error');
+            return null;
+        }
+
+        // USDC на Polygon (6 decimals)
         const USDC_CONTRACT = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.round(Number(price) * 1e6);
+        const usdcAmount = Math.floor(price * 1e6); // USDC = 6 decimals
         const amountHex = usdcAmount.toString(16).padStart(64, '0');
-        const recipientHex = ownerWallet.slice(2).padStart(64, '0');
+        const recipientHex = CONFIG.OWNER_WALLET.slice(2).padStart(64, '0');
+        // transfer(address,uint256) selector = 0xa9059cbb
         const data = '0xa9059cbb' + recipientHex + amountHex;
 
         const txHash = await window.ethereum.request({
@@ -724,48 +653,33 @@ async function processPayment(level, price, ownerWallet) {
             params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
         });
 
-        showNotification('⏳ Ожидание подтверждения...', 'info');
+        showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
 
-        if (!token) {
-            throw new Error('Требуется авторизация перед подтверждением оплаты');
+        for (let i = 0; i < 12; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            try {
+                const verifyRes = await fetch(
+                    `${CONFIG.API_URL}/api/payments/verify?tx_hash=${txHash}&level=${level}&wallet=${wallet}`
+                );
+                const verifyData = await verifyRes.json();
+                if (verifyData.ok) {
+                    showNotification('✅ Платёж подтверждён', 'success');
+                    return txHash;
+                }
+                // Критическая ошибка — не продолжаем
+                if (verifyData.reason && 
+                    !verifyData.reason.includes('not found') && 
+                    !verifyData.reason.includes('pending')) {
+                    showNotification('⚠️ ' + verifyData.reason, 'warning');
+                    // Всё равно возвращаем txHash — сервер сам решит
+                    return txHash;
+                }
+            } catch { /* продолжаем ждать */ }
         }
 
-        let confirmData = null;
-        let confirmRes = null;
-
-        for (let i = 0; i < 3; i++) {
-            await new Promise(r => setTimeout(r, 6000));
-
-            confirmRes = await fetch(`${CONFIG.API_URL}/api/payments/confirm`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ tx_hash: txHash, level })
-            });
-
-            confirmData = await confirmRes.json().catch(() => ({}));
-
-            if (confirmRes.ok && (confirmData.success || confirmData.reused)) {
-                showNotification('✅ Платёж подтверждён', 'success');
-                return txHash;
-            }
-
-            if (confirmRes.status === 401) {
-                throw new Error('Сессия истекла. Войдите заново.');
-            }
-
-            if (confirmRes.status === 409) {
-                throw new Error(confirmData?.error || 'Транзакция уже использована');
-            }
-
-            if (confirmRes.status !== 402) {
-                break;
-            }
-        }
-
-        throw new Error(confirmData?.error || 'Payment confirm failed');
+        // Таймаут — возвращаем txHash, пусть сервер проверит
+        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
+        return txHash;
 
     } catch (error) {
         if (error.code === 4001) {
@@ -1221,6 +1135,7 @@ async function saveSettings() {
     const serverUrl   = document.getElementById('serverUrl')?.value?.trim();
     const apiKey      = document.getElementById('apiKey')?.value?.trim();
     const archKey     = document.getElementById('architectKey')?.value?.trim();
+    const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
     // Сохраняем локально
