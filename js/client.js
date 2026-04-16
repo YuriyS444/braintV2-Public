@@ -31,7 +31,6 @@ const elements = {
     userInput: document.getElementById('userInput'),
     sendBtn: document.getElementById('sendBtn'),
     stopBtn: document.getElementById('stopBtn'),
-    streamToggle: document.getElementById('streamToggle'),
     suggestLevel: document.getElementById('suggestLevel'),
     searchInput: document.getElementById('searchInput'),
     statTotal: document.getElementById('statTotal'),
@@ -82,6 +81,8 @@ async function init() {
     elements.userInput.addEventListener('input', debounce(handleInput, 500));
     elements.userInput.addEventListener('keydown', handleKeyDown);
     elements.searchInput.addEventListener('input', handleSearch);
+    elements.levelSelect?.addEventListener('change', updateFileHint);
+    elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
     setInterval(updateThreatIndicator, 5000);
 }
@@ -349,9 +350,115 @@ function importCrystals() {
     input.click();
 }
 
+// ============================================================
+// FILE SYSTEM
+// ============================================================
+
+let attachedFiles = [];
+
+const FILE_LIMITS = {
+    S0: 0, S1: 1, S2: 2, S3: 3, S4: 5, S5: 7, S6: 10
+};
+
+const FILE_SIZE_LIMITS_MB = {
+    S1: 1, S2: 2, S3: 3, S4: 5, S5: 10, S6: 20
+};
+
+function triggerFileUpload() {
+    document.getElementById('fileInput')?.click();
+}
+
+function updateFileAccept() {
+    const input = document.getElementById('fileInput');
+    if (!input) return;
+    input.accept = '.txt,.md,.log,.json,.csv,.yaml,.yml,.xml,.env,.ini,.js,.ts,.jsx,.tsx,.py,.html,.css,.sql';
+}
+
+function updateFileHint() {
+    const hint = document.getElementById('fileTypeHint');
+    const level = elements.levelSelect?.value || 'S0';
+    if (!hint) return;
+    const maxFiles = FILE_LIMITS[level] || 0;
+    const maxSize  = FILE_SIZE_LIMITS_MB[level] || 0;
+    if (maxFiles === 0) {
+        hint.textContent = `На уровне ${level} загрузка файлов недоступна`;
+        return;
+    }
+    hint.textContent = `Уровень ${level}: до ${maxFiles} файл(ов), каждый до ${maxSize}MB`;
+}
+
+function handleFileSelect(event) {
+    const files    = Array.from(event.target.files || []);
+    const level    = elements.levelSelect?.value || 'S0';
+    const maxFiles = FILE_LIMITS[level] || 0;
+
+    if (maxFiles === 0) {
+        showNotification('Файлы недоступны на этом уровне', 'warning');
+        event.target.value = '';
+        return;
+    }
+    if (files.length > maxFiles) {
+        showNotification(`Максимум ${maxFiles} файл(ов) для уровня ${level}`, 'error');
+        event.target.value = '';
+        return;
+    }
+
+    const maxSizeMB = FILE_SIZE_LIMITS_MB[level] || 5;
+    for (const file of files) {
+        if (file.size > maxSizeMB * 1024 * 1024) {
+            showNotification(`Файл "${file.name}" превышает ${maxSizeMB}MB`, 'error');
+            event.target.value = '';
+            return;
+        }
+    }
+
+    attachedFiles = files;
+
+    const preview   = document.getElementById('filePreview');
+    const name      = document.getElementById('filePreviewName');
+    const icon      = document.getElementById('filePreviewIcon');
+    const attachBtn = document.getElementById('attachBtn');
+
+    if (attachedFiles.length === 1) {
+        name.textContent = attachedFiles[0].name;
+        icon.textContent = '📄';
+    } else {
+        name.textContent = `${attachedFiles.length} файлов`;
+        icon.textContent = '📚';
+    }
+
+    if (preview)    preview.style.display = 'flex';
+    if (attachBtn)  attachBtn.classList.add('has-file');
+}
+
+function removeAttachedFile() {
+    attachedFiles = [];
+    const preview   = document.getElementById('filePreview');
+    const fileInput = document.getElementById('fileInput');
+    const attachBtn = document.getElementById('attachBtn');
+    if (preview)    preview.style.display = 'none';
+    if (fileInput)  fileInput.value = '';
+    if (attachBtn)  attachBtn.classList.remove('has-file');
+    updateFileHint();
+}
+
+async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: reader.result.split(',')[1]
+        });
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 async function sendMessage() {
     const question = elements.userInput.value.trim();
-    if (!question) return;
+    if (!question && attachedFiles.length === 0) return;
     
     if (!CONFIG.API_URL) {
         openSettings();
@@ -363,12 +470,11 @@ async function sendMessage() {
         await login();
         if (!token) return;
     }
-    const useStream = elements.streamToggle.checked;
     
     elements.userInput.value = '';
     autoResize(elements.userInput);
     
-    addUserMessage(question);
+    addUserMessage(question || (attachedFiles.length ? `📎 ${attachedFiles.length} файл(ов)` : '...'));
     addTypingIndicator();
     
     if (elements.progressBar) {
@@ -401,6 +507,7 @@ async function sendMessage() {
                 if (elements.progressBar) elements.progressBar.style.display = 'none';
                 elements.sendBtn.style.display = 'flex';
                 elements.stopBtn.style.display = 'none';
+                removeAttachedFile();
                 return;
             }
         }
@@ -412,11 +519,19 @@ async function sendMessage() {
         } catch (error) {
         }
         
-        if (useStream) {
-            await sendStreamMessage(question, level, txHash);
-        } else {
-            await sendNormalMessage(question, level, txHash);
+        // Конвертируем файлы в base64 для отправки
+        let filesPayload = [];
+        for (const file of attachedFiles) {
+            try {
+                filesPayload.push(await fileToBase64(file));
+            } catch {
+                showNotification('Ошибка чтения файла', 'error');
+                return;
+            }
         }
+
+        await sendNormalMessage(question, level, txHash, filesPayload);
+        removeAttachedFile();
         
     } catch (error) {
         if (error.name !== 'AbortError') {
@@ -433,21 +548,22 @@ async function sendMessage() {
     }
 }
 
-async function sendNormalMessage(question, level, txHash) {
+async function sendNormalMessage(question, level, txHash, filesPayload = []) {
     const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
         method: 'POST',
-        signal: abortController.signal,
+        signal: abortController?.signal,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'Authorization': token ? `Bearer ${token}` : '',
             'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone
         },
         body: JSON.stringify({
-            question,
+            question: question || 'Проанализируй файлы',
             level,
-            provider: CONFIG.PROVIDER,
+            provider: elements.providerSelect?.value || CONFIG.PROVIDER,
             tx_hash: txHash,
-            history: history.slice(-10)
+            history: history.slice(-10),
+            ...(filesPayload.length ? { files: filesPayload } : {})
         })
     });
     
@@ -467,6 +583,10 @@ async function sendNormalMessage(question, level, txHash) {
             throw new Error(`Требуется оплата: $${error.price} для уровня ${error.level}`);
         }
 
+        if (response.status === 403) {
+            throw new Error(error.error || 'Файлы недоступны на этом уровне');
+        }
+
         throw new Error(error.error || 'Request failed');
     }
     
@@ -483,96 +603,11 @@ async function sendNormalMessage(question, level, txHash) {
         updateStats();
     }
     
-    history.push({ role: 'user', content: question });
+    history.push({ role: 'user', content: question || (filesPayload?.length ? `📎 ${filesPayload.length} файл(ов)` : '') });
     history.push({ role: 'assistant', content: data.answer });
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
 }
 
-async function sendStreamMessage(question, level, txHash) {
-    const response = await fetch(`${CONFIG.API_URL}/api/ask`, {
-        method: 'POST',
-        signal: abortController.signal,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        body: JSON.stringify({
-            question,
-            level,
-            provider: CONFIG.PROVIDER,
-            tx_hash: txHash,
-            history: history.slice(-10),
-            stream: true
-        })
-    });
-    
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(error.error || 'Request failed');
-    }
-    
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    
-    let answer = '';
-    let buffer = '';
-    
-    const messageId = addAssistantMessage('', null, level);
-    
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        
-        for (const line of lines) {
-            if (line.startsWith('data:')) {
-                const dataStr = line.slice(5).trim();
-                if (!dataStr) continue;
-                
-                try {
-                    const data = JSON.parse(dataStr);
-                    
-                    if (data.chunk) {
-                        answer += data.chunk;
-                        updateAssistantMessage(messageId, answer);
-                    }
-                    
-                    if (data.done) {
-                        removeTypingIndicator();
-                        
-                        if (data.crystal) {
-                            crystals.unshift({
-                                id: Date.now(),
-                                ...data.crystal
-                            });
-                            renderCrystals();
-                            updateStats();
-                        }
-                        
-                        finalizeAssistantMessage(messageId, data.crystal);
-                        history.push({ role: 'user', content: question });
-                        history.push({ role: 'assistant', content: answer });
-                        sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
-                    }
-                    
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    
-                } catch (e) {
-                    if (e.message && !e.message.includes('JSON')) {
-                        throw e;
-                    }
-                }
-            }
-        }
-    }
-}
 
 function stopGeneration() {
     if (abortController) {
