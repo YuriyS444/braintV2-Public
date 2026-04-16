@@ -31,7 +31,7 @@
             <div class="ws-indicator" id="wsIndicator" title="WebSocket">⚫</div>
             <div class="architect-badge" id="architectBadge" style="display: none; cursor: pointer;" onclick="openAdminPanel()" title="Кабинет архитектора">👑</div>
             
-            <select id="levelSelect" class="level-select">
+            <select id="levelSelect" class="level-select" onchange="updateFileHint()">
                 <option value="S0">S0 Free</option>
                 <option value="S1">S1 $0.1</option>
                 <option value="S2">S2 $0.5</option>
@@ -41,7 +41,7 @@
                 <option value="S6">S6 $10</option>
             </select>
             
-            <select id="providerSelect" class="provider-select" onchange="updateFileAccept()">
+            <select id="providerSelect" class="provider-select" onchange="updateFileAccept(); updateFileHint()">
                 <option value="auto" selected>🤖 Auto</option>
                 <option value="deepseek">🧠 DeepSeek</option>
                 <option value="claude">🎭 Claude</option>
@@ -143,15 +143,12 @@
                     <span class="suggest-link" onclick="applySuggestedLevel()" data-i18n="apply">(применить)</span>
                     <span class="input-hint" data-i18n="hint_enter">· Enter — отправить</span>
                     <span class="input-hint" data-i18n="hint_shift">· Shift+Enter — перенос</span>
-                    <label class="stream-toggle">
-                        <input type="checkbox" id="streamToggle" checked> Stream
-                    </label>
                 </div>
                 
                 <div class="input-wrapper">
                     <!-- Кнопка прикрепления файла -->
                     <button class="attach-btn" id="attachBtn" onclick="triggerFileUpload()" title="Прикрепить файл" data-i18n-title="attach_title">📎</button>
-                    <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)">
+                    <input type="file" id="fileInput" multiple style="display:none;" onchange="handleFileSelect(event)">
 
                     <textarea 
                         id="userInput" 
@@ -520,69 +517,6 @@
     }
 
     // ── Файлы ──
-    const PROVIDER_ACCEPT = {
-        deepseek: '.pdf,.txt,.md,.csv',
-        claude:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
-        openai:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif',
-        gemini:   '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif,.mp3,.wav,.mp4',
-        auto:     '.pdf,.txt,.md,.csv,.jpg,.jpeg,.png,.webp,.gif'
-    };
-
-    const PROVIDER_HINT = {
-        deepseek: 'PDF, TXT, MD, CSV',
-        claude:   'PDF, TXT, изображения (JPG, PNG, WEBP, GIF)',
-        openai:   'PDF, TXT, изображения (JPG, PNG, WEBP)',
-        gemini:   'PDF, TXT, изображения, аудио (MP3), видео (MP4)',
-        auto:     'PDF, TXT, изображения'
-    };
-
-    let attachedFile = null;
-
-    function updateFileAccept() {
-        const provider = document.getElementById('providerSelect').value;
-        const fileInput = document.getElementById('fileInput');
-        const hint = document.getElementById('fileTypeHint');
-        fileInput.accept = PROVIDER_ACCEPT[provider] || PROVIDER_ACCEPT.auto;
-        const hints = currentLang === 'en' ? PROVIDER_HINT_EN : PROVIDER_HINT;
-        hint.textContent = I18N[currentLang].fileHint + (hints[provider] || hints.auto);
-    }
-
-    function triggerFileUpload() {
-        updateFileAccept();
-        document.getElementById('fileInput').click();
-    }
-
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        attachedFile = file;
-        
-        const preview = document.getElementById('filePreview');
-        const name = document.getElementById('filePreviewName');
-        const icon = document.getElementById('filePreviewIcon');
-        const attachBtn = document.getElementById('attachBtn');
-
-        // Иконка по типу
-        if (file.type.startsWith('image/')) icon.textContent = '🖼️';
-        else if (file.type === 'application/pdf') icon.textContent = '📄';
-        else if (file.type.startsWith('audio/')) icon.textContent = '🎵';
-        else if (file.type.startsWith('video/')) icon.textContent = '🎬';
-        else icon.textContent = '📎';
-
-        name.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-        preview.style.display = 'flex';
-        attachBtn.classList.add('has-file');
-    }
-
-    function removeAttachedFile() {
-        attachedFile = null;
-        document.getElementById('filePreview').style.display = 'none';
-        document.getElementById('fileInput').value = '';
-        document.getElementById('attachBtn').classList.remove('has-file');
-    }
-
-    // Инициализация подсказки файлов
-    updateFileAccept();
     </script>
 </body>
 </html>
