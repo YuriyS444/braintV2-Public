@@ -84,7 +84,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    setInterval(updateThreatIndicator, 5000);
+    setInterval(updateThreatIndicator, 30000);
 }
 
 function debounce(func, wait) {
