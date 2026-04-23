@@ -474,7 +474,7 @@ async function sendMessage() {
     elements.userInput.value = '';
     autoResize(elements.userInput);
     
-    addUserMessage(question || (attachedFiles.length ? `📎 ${attachedFiles.length} файл(ов)` : '...'));
+    addUserMessage(question, attachedFiles.length ? [...attachedFiles] : []);
     addTypingIndicator();
     
     if (elements.progressBar) {
@@ -526,6 +526,7 @@ async function sendMessage() {
                 filesPayload.push(await fileToBase64(file));
             } catch {
                 showNotification('Ошибка чтения файла', 'error');
+                removeAttachedFile();
                 return;
             }
         }
@@ -726,18 +727,25 @@ async function processPayment(level, price) {
     }
 }
 
-function addUserMessage(text) {
+function addUserMessage(text, files = []) {
     removeWelcomeMessage();
-    
+
+    let filesHtml = '';
+    if (files && files.length > 0) {
+        const fileNames = files.map(f => `<span class="msg-file-tag">📄 ${escapeHtml(f.name)}</span>`).join('');
+        filesHtml = `<div class="msg-files">${fileNames}</div>`;
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message user';
     messageDiv.innerHTML = `
         <div class="message-avatar">👤</div>
         <div class="message-content">
-            <div class="message-bubble">${escapeHtml(text)}</div>
+            ${filesHtml}
+            ${text ? `<div class="message-bubble">${escapeHtml(text)}</div>` : ''}
         </div>
     `;
-    
+
     elements.messages.appendChild(messageDiv);
     scrollToBottom();
 }
