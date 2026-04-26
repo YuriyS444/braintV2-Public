@@ -1680,3 +1680,19 @@ header {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* ── Кнопка повтора после остановки ── */
+.retry-btn {
+    margin-top: 8px;
+    background: rgba(124, 106, 247, 0.2);
+    border: 1px solid rgba(124, 106, 247, 0.4);
+    border-radius: 6px;
+    color: #a78bfa;
+    padding: 4px 12px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.retry-btn:hover {
+    background: rgba(124, 106, 247, 0.4);
+}
