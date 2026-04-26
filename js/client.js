@@ -66,7 +66,9 @@ async function updateThreatIndicator() {
         const info = map[level] || map.low;
         el.textContent = info.icon;
         el.title = info.title;
-    } catch { /* silent — не мешаем UI */ }
+    } catch {
+        if (el) { el.textContent = '⚪'; el.title = 'Статус недоступен'; }
+    }
 }
 
 async function init() {
@@ -80,11 +82,12 @@ async function init() {
     
     elements.userInput.addEventListener('input', debounce(handleInput, 500));
     elements.userInput.addEventListener('keydown', handleKeyDown);
-    elements.searchInput.addEventListener('input', handleSearch);
+    elements.searchInput.addEventListener('input', debounce(handleSearch, 300));
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    setInterval(updateThreatIndicator, 30000);
+    const threatInterval = setInterval(updateThreatIndicator, 5000);
+    window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
 function debounce(func, wait) {
@@ -368,6 +371,14 @@ function triggerFileUpload() {
     document.getElementById('fileInput')?.click();
 }
 
+const ALLOWED_MIME = new Set([
+    'text/plain', 'text/markdown', 'text/html', 'text/css',
+    'application/json', 'application/xml', 'text/xml',
+    'text/x-python', 'text/javascript', 'application/javascript',
+    'text/x-sql', 'text/csv', 'application/x-yaml', 'text/yaml',
+    '' // пустой MIME — некоторые файлы (.env, .ini) не имеют типа
+]);
+
 function updateFileAccept() {
     const input = document.getElementById('fileInput');
     if (!input) return;
@@ -410,9 +421,25 @@ function handleFileSelect(event) {
             event.target.value = '';
             return;
         }
+        if (!ALLOWED_MIME.has(file.type)) {
+            showNotification(`Тип файла не поддерживается: ${file.name}`, 'error');
+            event.target.value = '';
+            return;
+        }
     }
 
-    attachedFiles = files;
+    // Добавляем к уже прикреплённым, не заменяем
+    const existingNames = new Set(attachedFiles.map(f => f.name));
+    const newFiles = files.filter(f => !existingNames.has(f.name));
+    const merged = [...attachedFiles, ...newFiles];
+
+    if (merged.length > maxFiles) {
+        showNotification(`Максимум ${maxFiles} файл(ов) для уровня ${level}`, 'error');
+        event.target.value = '';
+        return;
+    }
+
+    attachedFiles = merged;
 
     const preview   = document.getElementById('filePreview');
     const name      = document.getElementById('filePreviewName');
@@ -429,6 +456,7 @@ function handleFileSelect(event) {
 
     if (preview)    preview.style.display = 'flex';
     if (attachBtn)  attachBtn.classList.add('has-file');
+    event.target.value = ''; // сбрасываем input чтобы можно было выбрать те же файлы снова
 }
 
 function removeAttachedFile() {
@@ -535,7 +563,12 @@ async function sendMessage() {
         removeAttachedFile();
         
     } catch (error) {
-        if (error.name !== 'AbortError') {
+        if (error.name === 'AbortError') {
+            removeTypingIndicator();
+            // Показываем сообщение с кнопкой повтора
+            const lastQuestion = elements.userInput.value || history[history.length - 2]?.content || '';
+            addStoppedMessage(lastQuestion);
+        } else {
             removeTypingIndicator();
             addErrorMessage(error.message);
         }
@@ -610,10 +643,42 @@ async function sendNormalMessage(question, level, txHash, filesPayload = []) {
 }
 
 
+function addStoppedMessage(lastQuestion) {
+    const div = document.createElement('div');
+    div.className = 'message assistant';
+    div.innerHTML = `
+        <div class="message-avatar">🧠</div>
+        <div class="message-content">
+            <div class="message-bubble" style="opacity:0.6">
+                ⏹ Генерация остановлена
+                ${lastQuestion ? '<br><button class="retry-btn" onclick="retryLastMessage(this)">🔄 Повторить</button>' : ''}
+            </div>
+        </div>
+    `;
+    // Сохраняем вопрос в dataset чтобы не экранировать JSON в HTML
+    if (lastQuestion) {
+        div.querySelector('.retry-btn').dataset.question = lastQuestion;
+    }
+    elements.messages.appendChild(div);
+    scrollToBottom();
+}
+
+function retryLastMessage(btn) {
+    const question = btn?.dataset?.question || '';
+    if (question) elements.userInput.value = question;
+    sendMessage();
+}
+
 function stopGeneration() {
     if (abortController) {
         abortController.abort();
+        abortController = null;
     }
+    // Восстанавливаем UI немедленно, не ждём finally
+    removeTypingIndicator();
+    if (elements.progressBar) elements.progressBar.style.display = 'none';
+    elements.sendBtn.style.display = 'flex';
+    elements.stopBtn.style.display = 'none';
 }
 
 async function processPayment(level, price) {
