@@ -15,6 +15,7 @@ let history = JSON.parse(sessionStorage.getItem('brain_history') || '[]');
 let currentFilter = 'all';
 let currentSearch = '';
 let abortController = null;
+let isSending = false; // защита от двойной отправки
 let attackCount = 0;
 let searchTimeout = null;
 
@@ -86,7 +87,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000);
+    const threatInterval = setInterval(updateThreatIndicator, 5000);
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -485,6 +486,9 @@ async function fileToBase64(file) {
 }
 
 async function sendMessage() {
+    // Защита от двойной отправки (двойной клик, Enter + click одновременно)
+    if (isSending) return;
+
     const question = elements.userInput.value.trim();
     if (!question && attachedFiles.length === 0) return;
     
@@ -499,9 +503,12 @@ async function sendMessage() {
         if (!token) return;
     }
     
+    isSending = true; // блокируем повторную отправку
+    elements.sendBtn.disabled = true;
+
     elements.userInput.value = '';
     autoResize(elements.userInput);
-    
+
     addUserMessage(question, attachedFiles.length ? [...attachedFiles] : []);
     addTypingIndicator();
     
@@ -573,6 +580,8 @@ async function sendMessage() {
             addErrorMessage(error.message);
         }
     } finally {
+        isSending = false; // разблокируем отправку
+        elements.sendBtn.disabled = false;
         if (elements.progressBar) {
             elements.progressBar.style.display = 'none';
         }
@@ -674,7 +683,8 @@ function stopGeneration() {
         abortController.abort();
         abortController = null;
     }
-    // Восстанавливаем UI немедленно, не ждём finally
+    isSending = false;
+    elements.sendBtn.disabled = false;
     removeTypingIndicator();
     if (elements.progressBar) elements.progressBar.style.display = 'none';
     elements.sendBtn.style.display = 'flex';
