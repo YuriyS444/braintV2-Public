@@ -92,7 +92,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 5000);
+    const threatInterval = setInterval(updateThreatIndicator, 60000);
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
