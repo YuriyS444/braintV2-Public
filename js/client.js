@@ -57,12 +57,7 @@ async function updateThreatIndicator() {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/threat`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        // Не логируем ошибки авторизации — токен мог устареть
-        if (!res.ok) {
-            el.textContent = '⚪';
-            el.title = 'Статус недоступен';
-            return;
-        }
+        if (!res.ok) return;
         const { level, count } = await res.json();
         const map = {
             low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
@@ -92,7 +87,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 30000);
+    const threatInterval = setInterval(updateThreatIndicator, 60000);
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -122,26 +117,12 @@ async function connectWallet() {
         showNotification('✅ MetaMask подключён', 'success');
         
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
-        if (!nonceRes.ok) {
-            const err = await nonceRes.json().catch(() => ({}));
-            throw new Error(err.error || 'Failed to get nonce');
-        }
-        const nonceData = await nonceRes.json();
-        const nonce   = nonceData.nonce;
-        const message = nonceData.message;
-
-        if (!nonce || !message) {
-            throw new Error('Invalid nonce response from server');
-        }
-
+        const { nonce, message } = await nonceRes.json();
+        
         const signature = await window.ethereum.request({
             method: 'personal_sign',
             params: [message, wallet]
         });
-
-        if (!signature) {
-            throw new Error('MetaMask did not return signature');
-        }
         
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
@@ -157,17 +138,9 @@ async function connectWallet() {
 
 async function login() {
     try {
-        const nonce     = sessionStorage.getItem('wallet_nonce');
+        const nonce = sessionStorage.getItem('wallet_nonce');
         const signature = sessionStorage.getItem('wallet_signature');
-
-        if (!nonce || !signature) {
-            throw new Error('Session expired. Please reconnect MetaMask.');
-        }
-
-        if (!CONFIG.API_KEY) {
-            throw new Error('API key not set. Please add your key in settings.');
-        }
-
+        
         const response = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -180,10 +153,9 @@ async function login() {
         });
         
         if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error || `Login failed (${response.status})`);
+            throw new Error('Login failed');
         }
-
+        
         const data = await response.json();
         token = data.token;
         isArchitect = data.isArchitect;
