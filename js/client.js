@@ -45,9 +45,28 @@ const elements = {
 // ============================================================
 // Индикатор угроз — показывает уровень атак из attack_logs
 // ============================================================
+// CLI-001: кэш threat — не ходим на сервер чаще чем раз в 15 секунд
+let threatCache = { level: 'low', timestamp: 0 };
+const THREAT_CACHE_TTL = 15000;
+
+const THREAT_MAP = {
+    low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
+    medium: { icon: '🟡', title: 'Подозрительная активность' },
+    high:   { icon: '🔴', title: 'Высокая угроза' }
+};
+
 async function updateThreatIndicator() {
     const el = elements.threatIndicator;
     if (!el) return;
+
+    // Отдаём из кэша если не истёк
+    if (Date.now() - threatCache.timestamp < THREAT_CACHE_TTL) {
+        const info = THREAT_MAP[threatCache.level] || THREAT_MAP.low;
+        el.textContent = info.icon;
+        el.title = info.title;
+        return;
+    }
+
     try {
         if (!token) {
             el.textContent = '🟢';
@@ -57,14 +76,16 @@ async function updateThreatIndicator() {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/threat`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) return;
-        const { level, count } = await res.json();
-        const map = {
-            low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
-            medium: { icon: '🟡', title: `Подозрительная активность: ${count} попыток` },
-            high:   { icon: '🔴', title: `Высокая угроза: ${count} атак за час` }
-        };
-        const info = map[level] || map.low;
+        // Не логируем ошибки авторизации — токен мог устареть
+        if (!res.ok) {
+            el.textContent = '⚪';
+            el.title = 'Статус недоступен';
+            return;
+        }
+        const data = await res.json();
+        const lvl = data.level || 'low';
+        threatCache = { level: lvl, timestamp: Date.now() };
+        const info = THREAT_MAP[lvl] || THREAT_MAP.low;
         el.textContent = info.icon;
         el.title = info.title;
     } catch {
@@ -87,7 +108,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000);
+    const threatInterval = setInterval(updateThreatIndicator, 30000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -117,12 +138,26 @@ async function connectWallet() {
         showNotification('✅ MetaMask подключён', 'success');
         
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
-        const { nonce, message } = await nonceRes.json();
-        
+        if (!nonceRes.ok) {
+            const err = await nonceRes.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to get nonce');
+        }
+        const nonceData = await nonceRes.json();
+        const nonce   = nonceData.nonce;
+        const message = nonceData.message;
+
+        if (!nonce || !message) {
+            throw new Error('Invalid nonce response from server');
+        }
+
         const signature = await window.ethereum.request({
             method: 'personal_sign',
             params: [message, wallet]
         });
+
+        if (!signature) {
+            throw new Error('MetaMask did not return signature');
+        }
         
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
@@ -138,9 +173,17 @@ async function connectWallet() {
 
 async function login() {
     try {
-        const nonce = sessionStorage.getItem('wallet_nonce');
+        const nonce     = sessionStorage.getItem('wallet_nonce');
         const signature = sessionStorage.getItem('wallet_signature');
-        
+
+        if (!nonce || !signature) {
+            throw new Error('Session expired. Please reconnect MetaMask.');
+        }
+
+        if (!CONFIG.API_KEY) {
+            throw new Error('API key not set. Please add your key in settings.');
+        }
+
         const response = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -153,9 +196,10 @@ async function login() {
         });
         
         if (!response.ok) {
-            throw new Error('Login failed');
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `Login failed (${response.status})`);
         }
-        
+
         const data = await response.json();
         token = data.token;
         isArchitect = data.isArchitect;
@@ -183,13 +227,26 @@ async function verifyToken() {
         const response = await fetch(`${CONFIG.API_URL}/api/auth/verify`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        
+
         if (!response.ok) {
             token = null;
+            isArchitect = false;
             sessionStorage.removeItem('brain_token');
+            if (elements.architectBadge) elements.architectBadge.style.display = 'none';
+            return;
+        }
+
+        // CLI-004: обновляем isArchitect из ответа сервера
+        const data = await response.json().catch(() => ({}));
+        if (data.isArchitect !== undefined) {
+            isArchitect = data.isArchitect;
+            if (elements.architectBadge) {
+                elements.architectBadge.style.display = isArchitect ? 'flex' : 'none';
+            }
         }
     } catch {
         token = null;
+        isArchitect = false;
         sessionStorage.removeItem('brain_token');
     }
 }
@@ -309,7 +366,9 @@ async function syncFromDB() {
 }
 
 function exportCrystals() {
-    const data = JSON.stringify(crystals, null, 2);
+    // CLI-007: не экспортируем вирусы
+    const safe = crystals.filter(c => c.status !== 'virus');
+    const data = JSON.stringify(safe, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -503,7 +562,9 @@ async function sendMessage() {
         if (!token) return;
     }
     
-    isSending = true; // блокируем повторную отправку
+    // CLI-002: прерываем предыдущий запрос перед созданием нового
+    if (abortController) abortController.abort();
+    isSending = true;
     elements.sendBtn.disabled = true;
 
     elements.userInput.value = '';
@@ -648,6 +709,8 @@ async function sendNormalMessage(question, level, txHash, filesPayload = []) {
     
     history.push({ role: 'user', content: question || (filesPayload?.length ? `📎 ${filesPayload.length} файл(ов)` : '') });
     history.push({ role: 'assistant', content: data.answer });
+    // CLI-002: ограничиваем history в памяти
+    if (history.length > 50) history = history.slice(-50);
     sessionStorage.setItem('brain_history', JSON.stringify(history.slice(-20)));
 }
 
