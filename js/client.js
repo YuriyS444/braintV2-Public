@@ -7,6 +7,183 @@ const CONFIG = {
     THEME: localStorage.getItem('brain_theme') || 'dark'
 };
 
+// ── Язык интерфейса — автоопределение по браузеру ───────────
+function detectBrowserLang() {
+    // Сохранённый выбор пользователя — приоритет
+    const saved = localStorage.getItem('brain_lang');
+    if (saved) return saved;
+
+    // Язык браузера
+    const browserLang = (navigator.language || navigator.userLanguage || 'ru').toLowerCase();
+
+    // Русскоязычные локали
+    const ruLocales = ['ru', 'ru-ru', 'ru-ua', 'ru-by', 'ru-kz', 'uk', 'be', 'kk'];
+    if (ruLocales.some(l => browserLang.startsWith(l))) return 'ru';
+
+    // Всё остальное — английский
+    return 'en';
+}
+
+let currentLang = detectBrowserLang();
+
+const TRANSLATIONS = {
+    ru: {
+        // Навигация
+        crystals: 'Кристаллы',
+        filter_all: 'Все',
+        sync: '☁️ Синхр.',
+        export: '📥 Экспорт',
+        import: '📤 Импорт',
+        stat_total: 'всего',
+        apply: '(применить)',
+        hint_enter: '· Enter — отправить',
+        hint_shift: '· Shift+Enter — перенос',
+        rec_level: 'Рек. уровень:',
+        // Уведомления
+        install_metamask: 'Установите MetaMask',
+        connect_wallet: 'Подключите кошелёк',
+        connection_error: 'Ошибка подключения: ',
+        architect_activated: '👑 Режим архитектора активирован',
+        syncing: 'Синхронизация...',
+        synced: '✅ Синхронизировано',
+        import_error: '❌ Ошибка импорта',
+        copied: '✅ Скопировано',
+        copy_error: '❌ Ошибка копирования',
+        auth_required: 'Необходима авторизация через MetaMask',
+        connect_to_signin: 'Подключите MetaMask для входа',
+        files_unavailable: 'Файлы недоступны на этом уровне',
+        stop_generation: '⏹ Генерация остановлена',
+        retry: '🔄 Повторить',
+        // Уровни
+        day: 'день',
+        free: 'Бесплатно',
+        // Авторизация
+        metamask_connected: '✅ MetaMask подключён',
+        auth_error: 'Ошибка аутентификации',
+        session_expired: 'Сессия истекла. Переподключите MetaMask.',
+        apikey_not_set: 'API ключ не задан. Добавьте в настройках.',
+        wallet_not_connected: 'Кошелёк не подключён. Переподключите MetaMask.',
+        // Файлы
+        file_read_error: 'Ошибка чтения файла',
+        file_type_unsupported: 'Тип файла не поддерживается',
+        file_too_large: 'превышает',
+        files_max: 'Максимум',
+        files_max_suffix: 'файл(ов) для уровня',
+        no_valid_crystals: '❌ Нет валидных кристаллов для импорта',
+        export_ready: '📥 Экспорт готов',
+        // Платежи
+        payment_owner_missing: '❌ Ошибка: адрес получателя не загружен',
+        payment_owner_missing2: '❌ Кошелёк получателя не загружен. Попробуйте позже.',
+        payment_waiting: '⏳ Ожидание подтверждения транзакции...',
+        payment_confirmed: '✅ Платёж подтверждён',
+        payment_network_wait: '⏳ Транзакция отправлена, ожидаем подтверждения сети...',
+        payment_cancelled: 'Платёж отменён',
+        terms_accepted: '✅ Соглашение принято',
+        key_saved_server: 'сохранён на сервер',
+        key_saved_local: '✅ Ключ сохранён локально (подключите кошелёк для сохранения на сервер)',
+        settings_saved: '✅ Настройки сохранены',
+        key_deleted: 'удалён',
+        key_delete_error: '❌ Ошибка удаления',
+        no_server: '❌ Нет связи с сервером',
+        history_cleared: '🗑️ История очищена',
+        crystals_imported: 'кристаллов импортировано',
+        key_save_error: 'Ошибка сохранения ключа',
+        level_applied: 'применён',
+        error_prefix: '❌ Ошибка: ',
+        filter_open: '🟢 Открытый',
+        filter_science: '🔬 Научный',
+        filter_strict: '🔴 Строгий',
+        filter_mode_set: 'Режим фильтрации',
+    },
+    en: {
+        // Navigation
+        crystals: 'Crystals',
+        filter_all: 'All',
+        sync: '☁️ Sync',
+        export: '📥 Export',
+        import: '📤 Import',
+        stat_total: 'total',
+        apply: '(apply)',
+        hint_enter: '· Enter — send',
+        hint_shift: '· Shift+Enter — newline',
+        rec_level: 'Rec. level:',
+        // Notifications
+        install_metamask: 'Please install MetaMask',
+        connect_wallet: 'Connect wallet',
+        connection_error: 'Connection error: ',
+        architect_activated: '👑 Architect mode activated',
+        syncing: 'Syncing...',
+        synced: '✅ Synced',
+        import_error: '❌ Import error',
+        copied: '✅ Copied',
+        copy_error: '❌ Copy error',
+        auth_required: 'MetaMask authorization required',
+        connect_to_signin: 'Connect MetaMask to sign in',
+        files_unavailable: 'Files not available at this level',
+        stop_generation: '⏹ Generation stopped',
+        retry: '🔄 Retry',
+        // Levels
+        day: 'day',
+        free: 'Free',
+        // Auth
+        metamask_connected: '✅ MetaMask connected',
+        auth_error: 'Authentication error',
+        session_expired: 'Session expired. Please reconnect MetaMask.',
+        apikey_not_set: 'API key not set. Please add your key in settings.',
+        wallet_not_connected: 'Wallet not connected. Please reconnect MetaMask.',
+        // Files
+        file_read_error: 'File read error',
+        file_type_unsupported: 'File type not supported',
+        file_too_large: 'exceeds',
+        files_max: 'Maximum',
+        files_max_suffix: 'file(s) for level',
+        no_valid_crystals: '❌ No valid crystals to import',
+        export_ready: '📥 Export ready',
+        // Payments
+        payment_owner_missing: '❌ Error: recipient address not loaded',
+        payment_owner_missing2: '❌ Recipient wallet not loaded. Try again later.',
+        payment_waiting: '⏳ Waiting for transaction confirmation...',
+        payment_confirmed: '✅ Payment confirmed',
+        payment_network_wait: '⏳ Transaction sent, waiting for network confirmation...',
+        payment_cancelled: 'Payment cancelled',
+        terms_accepted: '✅ Agreement accepted',
+        key_saved_server: 'saved to server',
+        key_saved_local: '✅ Key saved locally (connect wallet to save to server)',
+        settings_saved: '✅ Settings saved',
+        key_deleted: 'deleted',
+        key_delete_error: '❌ Delete error',
+        no_server: '❌ No server connection',
+        history_cleared: '🗑️ History cleared',
+        crystals_imported: 'crystals imported',
+        key_save_error: 'Key save error',
+        level_applied: 'applied',
+        error_prefix: '❌ Error: ',
+        filter_open: '🟢 Open',
+        filter_science: '🔬 Science',
+        filter_strict: '🔴 Strict',
+        filter_mode_set: 'Filter mode',
+    }
+};
+
+// Получить перевод
+function t(key) {
+    return TRANSLATIONS[currentLang]?.[key] || TRANSLATIONS['ru']?.[key] || key;
+}
+
+// Применить язык UI — вызывается автоматически при загрузке
+function setLang(lang) {
+    if (!['ru', 'en'].includes(lang)) return;
+    currentLang = lang;
+    document.documentElement.lang = lang;
+
+    // Обновляем все элементы с data-i18n
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const translation = t(key);
+        if (translation && translation !== key) el.textContent = translation;
+    });
+}
+
 let wallet = null;
 let token = sessionStorage.getItem('brain_token');
 let isArchitect = false;
@@ -105,10 +282,11 @@ async function init() {
     elements.userInput.addEventListener('input', debounce(handleInput, 500));
     elements.userInput.addEventListener('keydown', handleKeyDown);
     elements.searchInput.addEventListener('input', debounce(handleSearch, 300));
+    setLang(currentLang); // применяем сохранённый язык
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -122,7 +300,7 @@ function debounce(func, wait) {
 
 async function connectWallet() {
     if (!window.ethereum) {
-        showNotification(currentLang === 'ru' ? 'Установите MetaMask' : 'Install MetaMask', 'error');
+        showNotification(t('install_metamask'), 'error');
         return;
     }
     
@@ -135,7 +313,7 @@ async function connectWallet() {
         elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
         elements.walletBtn.classList.add('connected');
         
-        showNotification('✅ MetaMask подключён', 'success');
+        showNotification(t('metamask_connected'), 'success');
         
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
         if (!nonceRes.ok) {
@@ -167,7 +345,7 @@ async function connectWallet() {
         }
         
     } catch (error) {
-        showNotification((currentLang === 'ru' ? 'Ошибка подключения: ' : 'Connection error: ') + error.message, 'error');
+        showNotification(t('connection_error') + error.message, 'error');
     }
 }
 
@@ -177,16 +355,16 @@ async function login() {
         const signature = sessionStorage.getItem('wallet_signature');
 
         if (!nonce || !signature) {
-            throw new Error('Session expired. Please reconnect MetaMask.');
+            throw new Error(t('session_expired'));
         }
 
         if (!CONFIG.API_KEY) {
-            throw new Error('API key not set. Please add your key in settings.');
+            throw new Error(t('apikey_not_set'));
         }
 
         // Если wallet не восстановлен — просим переподключить MetaMask
         if (!wallet) {
-            throw new Error('Wallet not connected. Please reconnect MetaMask.');
+            throw new Error(t('wallet_not_connected'));
         }
 
         const response = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
@@ -216,14 +394,14 @@ async function login() {
         
         if (isArchitect) {
             elements.architectBadge.style.display = 'inline-block';
-            showNotification(currentLang === 'ru' ? '👑 Режим архитектора активирован' : '👑 Architect mode activated', 'success');
+            showNotification(t('architect_activated'), 'success');
         }
         
         await loadCrystals();
         
     } catch (error) {
         console.error('Login error:', error);
-        showNotification('Ошибка аутентификации', 'error');
+        showNotification(t('auth_error'), 'error');
     }
 }
 
@@ -373,13 +551,13 @@ function handleSearch() {
 
 async function syncFromDB() {
     if (!token || !wallet) {
-        showNotification(currentLang === 'ru' ? 'Подключите кошелёк' : 'Connect wallet', 'warning');
+        showNotification(t('connect_wallet'), 'warning');
         return;
     }
     
-    showNotification(currentLang === 'ru' ? 'Синхронизация...' : 'Syncing...', 'info');
+    showNotification(t('syncing'), 'info');
     await loadCrystals();
-    showNotification(currentLang === 'ru' ? '✅ Синхронизировано' : '✅ Synced', 'success');
+    showNotification(t('synced'), 'success');
 }
 
 function exportCrystals() {
@@ -393,7 +571,7 @@ function exportCrystals() {
     a.download = `crystals-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showNotification('📥 Экспорт готов', 'success');
+    showNotification(t('export_ready'), 'success');
 }
 
 function importCrystals() {
@@ -423,7 +601,7 @@ function importCrystals() {
             }));
 
             if (valid.length === 0) {
-                showNotification('❌ Нет валидных кристаллов для импорта', 'error');
+                showNotification(t('no_valid_crystals'), 'error');
                 return;
             }
 
@@ -437,12 +615,12 @@ function importCrystals() {
             });
 
             const result = await response.json();
-            showNotification(`✅ Импортировано ${result.imported || valid.length} кристаллов`, 'success');
+            showNotification(`✅ ${result.imported || valid.length} ${t('crystals_imported')}`, 'success');
 
             await loadCrystals();
 
         } catch (error) {
-            showNotification(currentLang === 'ru' ? '❌ Ошибка импорта' : '❌ Import error', 'error');
+            showNotification(t('import_error'), 'error');
         }
     };
     
@@ -500,12 +678,12 @@ function handleFileSelect(event) {
     const maxFiles = FILE_LIMITS[level] || 0;
 
     if (maxFiles === 0) {
-        showNotification('Файлы недоступны на этом уровне', 'warning');
+        showNotification(t('files_unavailable'), 'warning');
         event.target.value = '';
         return;
     }
     if (files.length > maxFiles) {
-        showNotification(`Максимум ${maxFiles} файл(ов) для уровня ${level}`, 'error');
+        showNotification(`${t('files_max')} ${maxFiles} ${t('files_max_suffix')} ${level}`, 'error');
         event.target.value = '';
         return;
     }
@@ -513,12 +691,12 @@ function handleFileSelect(event) {
     const maxSizeMB = FILE_SIZE_LIMITS_MB[level] || 5;
     for (const file of files) {
         if (file.size > maxSizeMB * 1024 * 1024) {
-            showNotification(`Файл "${file.name}" превышает ${maxSizeMB}MB`, 'error');
+            showNotification(`${file.name} ${t('file_too_large')} ${maxSizeMB}MB`, 'error');
             event.target.value = '';
             return;
         }
         if (!ALLOWED_MIME.has(file.type)) {
-            showNotification(`Тип файла не поддерживается: ${file.name}`, 'error');
+            showNotification(`${t('file_type_unsupported')}: ${file.name}`, 'error');
             event.target.value = '';
             return;
         }
@@ -530,7 +708,7 @@ function handleFileSelect(event) {
     const merged = [...attachedFiles, ...newFiles];
 
     if (merged.length > maxFiles) {
-        showNotification(`Максимум ${maxFiles} файл(ов) для уровня ${level}`, 'error');
+        showNotification(`${t('files_max')} ${maxFiles} ${t('files_max_suffix')} ${level}`, 'error');
         event.target.value = '';
         return;
     }
@@ -657,7 +835,7 @@ async function sendMessage() {
             try {
                 filesPayload.push(await fileToBase64(file));
             } catch {
-                showNotification('Ошибка чтения файла', 'error');
+                showNotification(t('file_read_error'), 'error');
                 removeAttachedFile();
                 return;
             }
@@ -713,7 +891,7 @@ async function sendNormalMessage(question, level, txHash, filesPayload = []) {
         // Лимит исчерпан
         if (response.status === 429) {
             const msg = error.limit
-                ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/день.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/day.\nResets at midnight UTC.`)
+                ? (currentLang === 'ru' ? `⏳ Лимит ${error.level}: ${error.used}/${error.limit} запросов/${t('day')}.\nОбновится в полночь UTC.` : `⏳ Limit ${error.level}: ${error.used}/${error.limit} requests/${t('day')}.\nResets at midnight UTC.`)
                 : error.error;
             throw new Error(msg);
         }
@@ -813,7 +991,7 @@ async function processPayment(level, price) {
     }
 
     if (!CONFIG.OWNER_WALLET) {
-        showNotification('❌ Ошибка: адрес получателя не загружен', 'error');
+        showNotification(t('payment_owner_missing'), 'error');
         return null;
     }
 
@@ -852,7 +1030,7 @@ async function processPayment(level, price) {
             } catch {}
         }
         if (!CONFIG.OWNER_WALLET) {
-            showNotification('❌ Кошелёк получателя не загружен. Попробуйте позже.', 'error');
+            showNotification(t('payment_owner_missing2'), 'error');
             return null;
         }
 
@@ -870,7 +1048,7 @@ async function processPayment(level, price) {
             params: [{ from: wallet, to: USDC_CONTRACT, value: '0x0', data }]
         });
 
-        showNotification('⏳ Ожидание подтверждения транзакции...', 'info');
+        showNotification(t('payment_waiting'), 'info');
 
         for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
@@ -880,7 +1058,7 @@ async function processPayment(level, price) {
                 );
                 const verifyData = await verifyRes.json();
                 if (verifyData.ok) {
-                    showNotification('✅ Платёж подтверждён', 'success');
+                    showNotification(t('payment_confirmed'), 'success');
                     return txHash;
                 }
                 // Критическая ошибка — не продолжаем
@@ -895,12 +1073,12 @@ async function processPayment(level, price) {
         }
 
         // Таймаут — возвращаем txHash, пусть сервер проверит
-        showNotification('⏳ Транзакция отправлена, ожидаем подтверждения сети...', 'info');
+        showNotification(t('payment_network_wait'), 'info');
         return txHash;
 
     } catch (error) {
         if (error.code === 4001) {
-            showNotification('Платёж отменён', 'info');
+            showNotification(t('payment_cancelled'), 'info');
         } else {
             showNotification('❌ Ошибка: ' + error.message, 'error');
         }
@@ -1165,8 +1343,8 @@ function copyMessage(messageId) {
     if (!msg) return;
     const text = msg.querySelector('.message-bubble')?.textContent || '';
     navigator.clipboard.writeText(text)
-        .then(() => showNotification(currentLang === 'ru' ? '✅ Скопировано' : '✅ Copied', 'success'))
-        .catch(() => showNotification(currentLang === 'ru' ? '❌ Ошибка копирования' : '❌ Copy error', 'error'));
+        .then(() => showNotification(t('copied'), 'success'))
+        .catch(() => showNotification(t('copy_error'), 'error'));
 }
 
 function showCrystal(crystalId) {
@@ -1248,7 +1426,7 @@ async function loadLevelOptions() {
             const limit = cfg.daily_limit || 0;
             let label = lvl;
             if (price === 0) {
-                label += limit > 0 ? ` Free (${limit}/${currentLang === 'ru' ? 'день' : 'day'})` : ' Free';
+                label += limit > 0 ? ` Free (${limit}/${t('day')})` : ' Free';
             } else {
                 label += ` $${price}`;
             }
@@ -1324,7 +1502,7 @@ function acceptTerms() {
     localStorage.setItem('terms_version', TERMS_VERSION);
     localStorage.setItem('terms_date', new Date().toISOString());
     hideTermsModal();
-    if (typeof showNotification === 'function') showNotification('✅ Соглашение принято', 'success');
+    if (typeof showNotification === 'function') showNotification(t('terms_accepted'), 'success');
 }
 
 function declineTerms() {
@@ -1379,22 +1557,22 @@ async function saveSettings() {
             });
             const data = await res.json();
             if (res.ok) {
-                showNotification(`✅ Ключ ${provider} сохранён на сервер`, 'success');
+                showNotification(`✅ ${t('key_saved_server').replace('сохранён', provider + ' ' + (currentLang === 'ru' ? 'сохранён' : 'saved'))}`, 'success');
                 document.getElementById('apiKey').value = '';
                 await loadSavedKeys();
             } else {
-                showNotification(`❌ ${data.error || 'Ошибка сохранения ключа'}`, 'error');
+                showNotification(`❌ ${data.error || t('key_save_error')}`, 'error');
             }
         } catch (err) {
-            showNotification('❌ Нет связи с сервером', 'error');
+            showNotification(t('no_server'), 'error');
         }
     } else if (apiKey) {
         // Без авторизации — только в sessionStorage
         sessionStorage.setItem('brain_api_key', apiKey);
         CONFIG.API_KEY = apiKey;
-        showNotification('✅ Ключ сохранён локально (подключите кошелёк для сохранения на сервер)', 'info');
+        showNotification(t('key_saved_local'), 'info');
     } else {
-        showNotification('✅ Настройки сохранены', 'success');
+        showNotification(t('settings_saved'), 'success');
     }
 
     closeSettings();
@@ -1435,11 +1613,11 @@ async function deleteKey(provider) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
-            showNotification(`✅ Ключ ${provider} удалён`, 'success');
+            showNotification(`✅ ${provider} ${t('key_deleted')}`, 'success');
             await loadSavedKeys();
         }
     } catch {
-        showNotification('❌ Ошибка удаления', 'error');
+        showNotification(t('key_delete_error'), 'error');
     }
 }
 
@@ -1483,7 +1661,7 @@ function clearHistory() {
     }
     history.length = 0;
     sessionStorage.removeItem('brain_history');
-    showNotification('🗑️ История очищена', 'info');
+    showNotification(t('history_cleared'), 'info');
 }
 
 // ============================================================
@@ -1497,7 +1675,7 @@ function applySuggestedLevel() {
     const level = suggestEl.textContent.trim();
     if (level && levelEl.querySelector(`option[value="${level}"]`)) {
         levelEl.value = level;
-        showNotification(`✅ Уровень ${level} применён`, 'success');
+        showNotification(`✅ ${t('level_applied').replace('применён', level + ' ' + (currentLang === 'ru' ? 'применён' : 'applied'))}`, 'success');
     }
 }
 
@@ -1616,7 +1794,7 @@ init = async function() {
 // ============================================================
 
 function openAdminPanel() {
-    if (!token) return showNotification(currentLang === 'ru' ? 'Необходима авторизация через MetaMask' : 'MetaMask authorization required', 'warning');
+    if (!token) return showNotification(t('auth_required'), 'warning');
     document.getElementById('adminPanel').style.display = 'flex';
     showAdminTab('stats');
 }
@@ -2165,7 +2343,7 @@ function updateLevelSelect(level, price) {
 
 async function openProfile() {
     if (!token) {
-        showNotification(currentLang === 'ru' ? 'Подключите MetaMask для входа' : 'Connect MetaMask to sign in', 'info');
+        showNotification(t('connect_to_signin'), 'info');
         await connectWallet();
         return;
     }
@@ -2305,7 +2483,7 @@ async function loadProfile() {
 
 // ─── РЕЖИМ ФИЛЬТРАЦИИ ────────────────────────────────────────
 async function adminSetFilterMode(mode) {
-    const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+    const labels = { open: t('filter_open'), science: t('filter_science'), strict: t('filter_strict') };
     if (!confirm(`Установить режим фильтрации: ${labels[mode]}?`)) return;
     try {
         await adminFetch('/api/admin/filter-mode', { method: 'POST', body: { mode } });
@@ -2314,7 +2492,7 @@ async function adminSetFilterMode(mode) {
         showNotification(`✅ Режим фильтрации: ${labels[mode]}`, 'success');
         highlightFilterMode(mode);
     } catch(e) {
-        showNotification('❌ Ошибка: ' + e.message, 'error');
+        showNotification(t('error_prefix') + e.message, 'error');
     }
 }
 
@@ -2322,7 +2500,7 @@ async function loadFilterMode() {
     try {
         const d = await adminFetch('/api/admin/filter-mode');
         const status = document.getElementById('filterModeStatus');
-        const labels = { open: '🟢 Открытый', science: '🔬 Научный', strict: '🔴 Строгий' };
+        const labels = { open: t('filter_open'), science: t('filter_science'), strict: t('filter_strict') };
         if (status) status.textContent = `Активный режим: ${labels[d.mode] || d.mode}`;
         highlightFilterMode(d.mode);
     } catch {}
@@ -2338,5 +2516,5 @@ function highlightFilterMode(mode) {
 }
 
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => showNotification(currentLang === 'ru' ? '📋 Скопировано' : '📋 Copied', 'success'));
+    navigator.clipboard.writeText(text).then(() => showNotification(t('copied'), 'success'));
 }
