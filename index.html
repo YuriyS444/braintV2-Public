@@ -411,11 +411,11 @@
     };
 
     const browserLang = navigator.language?.startsWith('ru') ? 'ru' : 'en';
-    const currentLang = browserLang;
+    // currentLang объявлен в client.js — используем browserLang локально
 
     function applyLang() {
-        const t = I18N[currentLang];
-        document.documentElement.lang = currentLang;
+        const t = I18N[browserLang];
+        document.documentElement.lang = browserLang;
         // Все элементы с data-i18n
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
@@ -487,7 +487,7 @@
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
-        recognition.lang = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+        recognition.lang = browserLang === 'ru' ? 'ru-RU' : 'en-US';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
 
