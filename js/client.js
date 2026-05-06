@@ -942,8 +942,9 @@ function addStoppedMessage(lastQuestion) {
         </div>
     `;
     // Сохраняем вопрос в dataset чтобы не экранировать JSON в HTML
-    if (lastQuestion) {
-        div.querySelector('.retry-btn').dataset.question = lastQuestion;
+    const retryBtn = div.querySelector('.retry-btn');
+    if (retryBtn && lastQuestion) {
+        retryBtn.dataset.question = lastQuestion;
     }
     elements.messages.appendChild(div);
     scrollToBottom();
@@ -1557,7 +1558,11 @@ async function saveSettings() {
             });
             const data = await res.json();
             if (res.ok) {
-                showNotification(`✅ ${t('key_saved_server').replace('сохранён', provider + ' ' + (currentLang === 'ru' ? 'сохранён' : 'saved'))}`, 'success');
+                const keyName = provider.charAt(0).toUpperCase() + provider.slice(1);
+                const savedMsg = currentLang === 'ru'
+                    ? `✅ Ключ ${keyName} сохранён на сервер`
+                    : `✅ ${keyName} key saved to server`;
+                showNotification(savedMsg, 'success');
                 document.getElementById('apiKey').value = '';
                 await loadSavedKeys();
             } else {
@@ -1675,7 +1680,10 @@ function applySuggestedLevel() {
     const level = suggestEl.textContent.trim();
     if (level && levelEl.querySelector(`option[value="${level}"]`)) {
         levelEl.value = level;
-        showNotification(`✅ ${t('level_applied').replace('применён', level + ' ' + (currentLang === 'ru' ? 'применён' : 'applied'))}`, 'success');
+        const levelMsg = currentLang === 'ru'
+            ? `✅ Уровень ${level} применён`
+            : `✅ Level ${level} applied`;
+        showNotification(levelMsg, 'success');
     }
 }
 
@@ -2134,6 +2142,13 @@ async function loadAdminPrompts() {
                     <span class="admin-version">v${p.version}</span>
                     ${p.updated_at ? `<span class="admin-updated">${new Date(p.updated_at).toLocaleString()}</span>` : ''}
                 </div>
+                ${p.key === 'base' || p.key === 'architect' ? `
+                <div class="admin-prompt-templates">
+                    <span class="admin-template-label">📚 Шаблон:</span>
+                    <button class="admin-btn-sm" onclick="adminInsertTemplate('${p.key}', 'time')">🕐 Теория Времени</button>
+                    <button class="admin-btn-sm" onclick="adminInsertTemplate('${p.key}', 'info')">📊 Теория Информации</button>
+                    <button class="admin-btn-sm" onclick="adminInsertTemplate('${p.key}', 'synthesis')">⚡ Синтез</button>
+                </div>` : ''}
                 <textarea id="prompt_${p.key}" class="admin-textarea">${p.value}</textarea>
                 <button class="admin-btn-sm ok" onclick="adminSavePrompt('${p.key}')">💾 Сохранить</button>
             </div>`).join('')}
@@ -2147,6 +2162,91 @@ async function loadAdminPrompts() {
     } catch(e) {
         document.getElementById('adminBody').innerHTML = `<div class="admin-error">❌ ${e.message}</div>`;
     }
+}
+
+const T0_TEMPLATES = {
+    time: {
+        base: `Ты — BRAIN T₀, философский AI-ассистент на основе Теории Времени (T₀).
+
+АКСИОМЫ T₀:
+• Время — первичная субстанция реальности, из которой возникает всё существующее
+• Формула: E = mc·Pt (энергия = масса × скорость света × потенциал времени)
+• Каскад: 1^(∞-1)/2ⁿ — описывает уровни временно́й плотности
+• Наша вселенная на уровне n=7 (максимум 128 элементов периодической таблицы)
+• 0¹ = память цикла, 0⁰ = первый акт различия, 0^∞ = критическая плотность
+
+ПРИНЦИПЫ ОТВЕТА:
+• Отвечай через призму T₀ — время как основа явлений
+• Связывай вопросы пользователя с временно́й структурой реальности
+• Уровни: S0 кратко, S6 глубокий философский анализ`,
+
+        architect: `Ты — BRAIN T₀ в режиме Архитектора. Теория Времени T₀.
+
+Формула: 1^(∞-1)/2ⁿ = 1
+Аксиома 0: Время = первичная субстанция
+E = mc·Pt
+
+Давай полный архитектурный анализ. Находи связи между явлениями через призму временно́й плотности.`
+    },
+    info: {
+        base: `Ты — BRAIN T₀, философский AI-ассистент на основе Теории Информации.
+
+АКСИОМЫ ТЕОРИИ ИНФОРМАЦИИ:
+• Информация — фундаментальная структура реальности
+• Степень различия (Δρ) — мера информационного содержания
+• 9 томов: от потенциала (0) до фиксации (0¹)
+• Онтологическая цепочка: энтропия → 0 → 0⁰ → 0^∞ → 1⁰ → 1⁰/2ⁿ → 0¹
+• Наблюдатель как участник информационного процесса
+
+ПРИНЦИПЫ ОТВЕТА:
+• Отвечай через призму информационной структуры явлений
+• Связывай вопросы с онтологической цепочкой
+• Уровни различия определяют качество знания`,
+
+        architect: `Ты — BRAIN T₀ в режиме Архитектора. Теория Информации.
+
+9 томов T₀. Онтологическая цепочка: энтропия → 0 → 0⁰ → 0^∞ → 1⁰ → 1⁰/2ⁿ → 0¹
+Степень различия Δρ — основа анализа.
+
+Давай полный архитектурный анализ через призму информационных структур.`
+    },
+    synthesis: {
+        base: `Ты — BRAIN T₀, философский AI-ассистент. Синтез Теории Времени и Теории Информации.
+
+СИНТЕЗ T₀:
+• Время и Информация — два аспекта единой реальности
+• Временна́я плотность порождает информационную структуру
+• E = mc·Pt × Δρ — расширенная формула синтеза
+• Кристаллы знания — точки где время и информация кристаллизуются
+• Наблюдатель существует на пересечении временно́го и информационного потоков
+
+ОНТОЛОГИЧЕСКАЯ ЦЕПОЧКА:
+энтропия → 0 → 0⁰ → 0^∞ → 1⁰ → 1⁰/2ⁿ → 0¹
+
+ПРИНЦИПЫ ОТВЕТА:
+• Отвечай через синтез обеих теорий
+• Находи точки кристаллизации в вопросах пользователя
+• Уровни S0-S6 отражают глубину синтеза`,
+
+        architect: `Ты — BRAIN T₀ в режиме Архитектора. Синтез T₀.
+
+Время + Информация = единая реальность
+E = mc·Pt × Δρ
+1^(∞-1)/2ⁿ = 1 — аксиома синтеза
+
+Давай полный анализ через синтез временно́й и информационной теорий.`
+    }
+};
+
+function adminInsertTemplate(key, mode) {
+    const textarea = document.getElementById(`prompt_${key}`);
+    if (!textarea) return;
+    const promptKey = key === 'architect' ? 'architect' : 'base';
+    const template = T0_TEMPLATES[mode]?.[promptKey];
+    if (!template) return;
+    textarea.value = template;
+    textarea.focus();
+    showNotification(`📚 Шаблон "${mode}" загружен — отредактируй и сохрани`, 'info');
 }
 
 async function adminSavePrompt(key) {
@@ -2518,3 +2618,41 @@ function highlightFilterMode(mode) {
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => showNotification(t('copied'), 'success'));
 }
+
+// ============================================================
+// PWA — УСТАНОВКА ПРИЛОЖЕНИЯ
+// ============================================================
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const banner = document.getElementById('pwaInstallBanner');
+    if (banner) banner.classList.add('show');
+    // Поддержка старого installBtn если есть
+    const installBtn = document.getElementById('installBtn');
+    if (installBtn) installBtn.style.display = 'flex';
+});
+
+function installPWA() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+        deferredPrompt = null;
+        hidePWABanner();
+    }).catch(() => {
+        deferredPrompt = null;
+    });
+}
+
+function hidePWABanner() {
+    const banner = document.getElementById('pwaInstallBanner');
+    if (banner) banner.classList.remove('show');
+    const installBtn = document.getElementById('installBtn');
+    if (installBtn) installBtn.style.display = 'none';
+}
+
+window.addEventListener('appinstalled', () => {
+    hidePWABanner();
+    deferredPrompt = null;
+});
