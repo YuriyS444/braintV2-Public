@@ -8,6 +8,7 @@
     <link rel="manifest" href="/braintV2-Public/manifest.json">
     <meta name="theme-color" content="#7c6af7">
     <meta name="mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/braintV2-Public/icons/icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BRAIN T₀">
@@ -178,6 +179,10 @@
             </div>
             <div class="modal-body">
                 <div class="settings-group">
+                    <label data-i18n="label_server">🌐 Сервер API</label>
+                    <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
+                </div>
+                <div class="settings-group">
                     <label data-i18n="label_provider">🤖 Провайдер ключа</label>
                     <select id="keyProvider">
                         <option value="deepseek">🧠 DeepSeek</option>
@@ -302,7 +307,9 @@
     function installPWA() {
         if (deferredPrompt) {
             deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(() => { deferredPrompt = null; hidePWABanner(); });
+            deferredPrompt.userChoice
+                .then(() => { deferredPrompt = null; hidePWABanner(); })
+                .catch(() => { deferredPrompt = null; });
         }
     }
     function hidePWABanner() {
