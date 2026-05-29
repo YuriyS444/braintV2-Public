@@ -1,42 +1,45 @@
 {
-    "name": "BRAIN T₀",
-    "short_name": "BRAIN T₀",
-    "description": "BRAIN T₀ — интеллектуальная AI система нового поколения, построенная на теории информации T₀. Главная формула: 1^(∞-1)/2ⁿ = 1",
-    "id": "com.braint0.app",
-    "start_url": "/braintV2-Public/",
-    "scope": "/braintV2-Public/",
-    "display": "standalone",
-    "orientation": "portrait-primary",
-    "background_color": "#0a0a0f",
-    "theme_color": "#7c6af7",
-    "lang": "ru",
-    "dir": "ltr",
-    "icons": [
-        {
-            "src": "icons/icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "icons/icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
-        },
-        {
-            "src": "icons/icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "icons/icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
-        }
-    ],
-    "categories": ["productivity", "education"],
-    "prefer_related_applications": false
+  "name": "BRAIN T₀",
+  "short_name": "BRAIN T₀",
+  "description": "BRAIN T₀ — AI система кристаллизации знаний на теории информации T₀. 1^(∞-1)/2ⁿ = 1",
+  "id": "com.braint0.app",
+  "start_url": "/braintV2-Public/",
+  "scope": "/braintV2-Public/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0f",
+  "theme_color": "#7c6af7",
+  "lang": "ru",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "education"
+  ],
+  "prefer_related_applications": false
 }
