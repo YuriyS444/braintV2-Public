@@ -1,7 +1,7 @@
 {
-    "name": "BRAIN T₀ v5.0",
+    "name": "BRAIN T₀",
     "short_name": "BRAIN T₀",
-    "description": "Философская AI система · 1^(∞-1)/2ⁿ = 1",
+    "description": "Философская AI система на основе теории информации T₀. Кристаллизация знаний через онтологическую цепочку.",
     "start_url": "/braintV2-Public/",
     "scope": "/braintV2-Public/",
     "display": "standalone",
@@ -9,6 +9,7 @@
     "background_color": "#0a0a0f",
     "theme_color": "#7c6af7",
     "lang": "ru",
+    "dir": "ltr",
     "icons": [
         {
             "src": "icons/icon-192.png",
@@ -24,5 +25,6 @@
         }
     ],
     "categories": ["productivity", "education"],
-    "screenshots": []
+    "screenshots": [],
+    "prefer_related_applications": false
 }
