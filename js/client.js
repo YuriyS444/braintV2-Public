@@ -286,7 +286,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -298,23 +298,78 @@ function debounce(func, wait) {
     };
 }
 
+// ── WEB3AUTH EMBEDDED WALLETS ────────────────────────────────────────────────
+// Совместимый слой: на десктопе используем window.ethereum (MetaMask extension),
+// на мобильном — Web3Auth Embedded Wallets SDK (встроенный кошелёк без расширения).
+// API идентичен — остальной код не меняется.
+
+let web3authProvider = null;
+
+async function initWeb3Auth() {
+    // Если window.ethereum уже есть (десктоп + MetaMask extension) — используем его
+    if (window.ethereum) return true;
+
+    // Мобильный — инициализируем Web3Auth
+    try {
+        const { Web3Auth, WEB3AUTH_NETWORK } = await import(
+            'https://cdn.jsdelivr.net/npm/@web3auth/modal@9/dist/modal.esm.min.js'
+        );
+        const web3auth = new Web3Auth({
+            clientId: 'BNJY1vllDmuey75fYxUFk8LvpDGiLaG8W7KLy-cd_sVRVcivvHJPEzAmArqxY2aPFOw9sBzphQ7ZPtAdQ3EogNM', // TODO: вставь свой Client ID с dashboard.web3auth.io
+            web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
+            chainConfig: {
+                chainNamespace: 'eip155',
+                chainId: '0x89',           // Polygon Mainnet
+                rpcTarget: 'https://polygon-rpc.com',
+                displayName: 'Polygon',
+                ticker: 'POL',
+                tickerName: 'Polygon'
+            }
+        });
+        await web3auth.initModal();
+        web3authProvider = web3auth;
+
+        // Создаём совместимый window.ethereum из Web3Auth провайдера
+        if (web3auth.provider) {
+            window.ethereum = web3auth.provider;
+        }
+        return true;
+    } catch (err) {
+        console.error('Web3Auth init failed:', err);
+        return false;
+    }
+}
+
 async function connectWallet() {
-    if (!window.ethereum) {
+    // Инициализируем Web3Auth если нужно (мобильный)
+    const initialized = await initWeb3Auth();
+    if (!initialized) {
         showNotification(t('install_metamask'), 'error');
         return;
     }
-    
+
+    if (!window.ethereum) {
+        // Запускаем Web3Auth modal для входа
+        try {
+            const provider = await web3authProvider.connect();
+            window.ethereum = provider;
+        } catch (err) {
+            showNotification(t('connection_error') + err.message, 'error');
+            return;
+        }
+    }
+
     try {
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
+        const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts'
         });
-        
+
         wallet = accounts[0];
         elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
         elements.walletBtn.classList.add('connected');
-        
+
         showNotification(t('metamask_connected'), 'success');
-        
+
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
         if (!nonceRes.ok) {
             const err = await nonceRes.json().catch(() => ({}));
@@ -336,74 +391,19 @@ async function connectWallet() {
         if (!signature) {
             throw new Error('MetaMask did not return signature');
         }
-        
+
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
-        
+
         if (CONFIG.API_KEY) {
             await login();
         }
-        
+
     } catch (error) {
         showNotification(t('connection_error') + error.message, 'error');
     }
 }
 
-async function login() {
-    try {
-        const nonce     = sessionStorage.getItem('wallet_nonce');
-        const signature = sessionStorage.getItem('wallet_signature');
-
-        if (!nonce || !signature) {
-            throw new Error(t('session_expired'));
-        }
-
-        if (!CONFIG.API_KEY) {
-            throw new Error(t('apikey_not_set'));
-        }
-
-        // Если wallet не восстановлен — просим переподключить MetaMask
-        if (!wallet) {
-            throw new Error(t('wallet_not_connected'));
-        }
-
-        const response = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                apiKey: CONFIG.API_KEY,
-                wallet,
-                signature,
-                nonce
-            })
-        });
-        
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error || `Login failed (${response.status})`);
-        }
-
-        const data = await response.json();
-        token = data.token;
-        isArchitect = data.isArchitect;
-        
-        sessionStorage.setItem('brain_token', token);
-        
-        sessionStorage.removeItem('wallet_nonce');
-        sessionStorage.removeItem('wallet_signature');
-        
-        if (isArchitect) {
-            elements.architectBadge.style.display = 'inline-block';
-            showNotification(t('architect_activated'), 'success');
-        }
-        
-        await loadCrystals();
-        
-    } catch (error) {
-        console.error('Login error:', error);
-        showNotification(t('auth_error'), 'error');
-    }
-}
 
 async function verifyToken() {
     try {
