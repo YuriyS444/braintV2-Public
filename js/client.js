@@ -404,6 +404,63 @@ async function connectWallet() {
     }
 }
 
+async function login() {
+    try {
+        const nonce     = sessionStorage.getItem('wallet_nonce');
+        const signature = sessionStorage.getItem('wallet_signature');
+
+        if (!nonce || !signature) {
+            throw new Error(t('session_expired'));
+        }
+
+        if (!CONFIG.API_KEY) {
+            throw new Error(t('apikey_not_set'));
+        }
+
+        if (!wallet) {
+            throw new Error(t('wallet_not_connected'));
+        }
+
+        const response = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey: CONFIG.API_KEY,
+                wallet,
+                signature,
+                nonce
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `Login failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        token = data.token;
+        isArchitect = data.isArchitect;
+
+        sessionStorage.setItem('brain_token', token);
+
+        sessionStorage.removeItem('wallet_nonce');
+        sessionStorage.removeItem('wallet_signature');
+
+        if (isArchitect) {
+            elements.architectBadge.style.display = 'inline-block';
+            showNotification(t('architect_activated'), 'success');
+        }
+
+        await loadCrystals();
+
+    } catch (error) {
+        console.error('Login error:', error);
+        showNotification(t('auth_error'), 'error');
+    }
+}
+
+
+
 
 async function verifyToken() {
     try {
