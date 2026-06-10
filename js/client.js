@@ -286,7 +286,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -309,27 +309,38 @@ async function initWeb3Auth() {
     // Если window.ethereum уже есть (десктоп + MetaMask extension) — используем его
     if (window.ethereum) return true;
 
-    // Мобильный — инициализируем Web3Auth
+    // Мобильный — используем Web3Auth из глобального объекта (загружен через <script> в index.html)
     try {
-        const { Web3Auth, WEB3AUTH_NETWORK } = await import(
-            'https://cdn.jsdelivr.net/npm/@web3auth/modal@9/dist/modal.esm.min.js'
-        );
+        if (typeof window.Modal === 'undefined' && typeof window.Web3Auth === 'undefined') {
+            console.error('Web3Auth SDK не загружен — проверь <script> тег в index.html');
+            return false;
+        }
+
+        // UMD экспортирует в window.Modal или window.Web3Auth в зависимости от версии
+        const Web3Auth = window.Web3Auth?.Web3Auth || window.Modal?.Web3Auth;
+        const WEB3AUTH_NETWORK = window.Web3Auth?.WEB3AUTH_NETWORK || window.Modal?.WEB3AUTH_NETWORK;
+
+        if (!Web3Auth) {
+            console.error('Web3Auth класс не найден');
+            return false;
+        }
+
         const web3auth = new Web3Auth({
-            clientId: 'BNJY1vllDmuey75fYxUFk8LvpDGiLaG8W7KLy-cd_sVRVcivvHJPEzAmArqxY2aPFOw9sBzphQ7ZPtAdQ3EogNM', // TODO: вставь свой Client ID с dashboard.web3auth.io
-            web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_MAINNET,
+            clientId: 'BNJY1vllDmuey75fYxUFk8LvpDGiLaG8W7KLy-cd_sVRVcivvHJPEzAmArqxY2aPFOw9sBzphQ7ZPtAdQ3EogNM', // ← вставь свой Client ID
+            web3AuthNetwork: WEB3AUTH_NETWORK?.SAPPHIRE_MAINNET || 'sapphire_mainnet',
             chainConfig: {
                 chainNamespace: 'eip155',
-                chainId: '0x89',           // Polygon Mainnet
+                chainId: '0x89',
                 rpcTarget: 'https://polygon-rpc.com',
                 displayName: 'Polygon',
                 ticker: 'POL',
                 tickerName: 'Polygon'
             }
         });
+
         await web3auth.initModal();
         web3authProvider = web3auth;
 
-        // Создаём совместимый window.ethereum из Web3Auth провайдера
         if (web3auth.provider) {
             window.ethereum = web3auth.provider;
         }
