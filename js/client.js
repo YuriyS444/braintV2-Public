@@ -298,87 +298,91 @@ function debounce(func, wait) {
     };
 }
 
-// ── WEB3AUTH EMBEDDED WALLETS ────────────────────────────────────────────────
-// Совместимый слой: на десктопе используем window.ethereum (MetaMask extension),
-// на мобильном — Web3Auth Embedded Wallets SDK (встроенный кошелёк без расширения).
-// API идентичен — остальной код не меняется.
+// ── WALLETCONNECT + METAMASK DEEPLINK ────────────────────────────────────────
+// Десктоп: window.ethereum (MetaMask extension) — прямой доступ как раньше.
+// Мобильный: WalletConnect v2 с deeplink → открывает MetaMask Mobile напрямую.
+// API идентичен — код оплаты и авторизации не меняется.
 
-let web3authProvider = null;
+const WC_PROJECT_ID = 'd04282c19dc2dafdd36f6f50f81b93d8';
+const DAPP_URL      = 'https://yuriys444.github.io/braintV2-Public/';
+const isMobile      = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
-async function initWeb3Auth() {
-    // Если window.ethereum уже есть (десктоп + MetaMask extension) — используем его
-    if (window.ethereum) return true;
+let wcProvider = null;
 
-    // Мобильный — используем Web3Auth из глобального объекта (загружен через <script> в index.html)
-    try {
-        if (typeof window.Modal === 'undefined' && typeof window.Web3Auth === 'undefined') {
-            console.error('Web3Auth SDK не загружен — проверь <script> тег в index.html');
-            return false;
-        }
+async function initWalletConnect() {
+    // Загружаем WalletConnect Ethereum Provider из CDN если ещё не загружен
+    if (wcProvider) return wcProvider;
 
-        // UMD экспортирует в window.Modal или window.Web3Auth в зависимости от версии
-        const Web3Auth = window.Web3Auth?.Web3Auth || window.Modal?.Web3Auth;
-        const WEB3AUTH_NETWORK = window.Web3Auth?.WEB3AUTH_NETWORK || window.Modal?.WEB3AUTH_NETWORK;
-
-        if (!Web3Auth) {
-            console.error('Web3Auth класс не найден');
-            return false;
-        }
-
-        const web3auth = new Web3Auth({
-            clientId: 'BNJY1vllDmuey75fYxUFk8LvpDGiLaG8W7KLy-cd_sVRVcivvHJPEzAmArqxY2aPFOw9sBzphQ7ZPtAdQ3EogNM', // ← вставь свой Client ID
-            web3AuthNetwork: WEB3AUTH_NETWORK?.SAPPHIRE_MAINNET || 'sapphire_mainnet',
-            chainConfig: {
-                chainNamespace: 'eip155',
-                chainId: '0x89',
-                rpcTarget: 'https://polygon-rpc.com',
-                displayName: 'Polygon',
-                ticker: 'POL',
-                tickerName: 'Polygon'
-            }
+    const { EthereumProvider } = window.EthereumProvider
+        ? window
+        : await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2/dist/index.umd.js';
+            s.onload = () => resolve(window);
+            s.onerror = reject;
+            document.head.appendChild(s);
         });
 
-        await web3auth.initModal();
-        web3authProvider = web3auth;
-
-        if (web3auth.provider) {
-            window.ethereum = web3auth.provider;
+    wcProvider = await EthereumProvider.init({
+        projectId:      WC_PROJECT_ID,
+        chains:         [137],          // Polygon Mainnet — число (#5)
+        showQrModal:    false,
+        rpcMap: {
+            137: 'https://polygon-rpc.com' // публичный RPC
+        },
+        metadata: {
+            name:        'BRAIN T₀',
+            description: 'AI система кристаллизации знаний',
+            url:          DAPP_URL,
+            icons:       [`${DAPP_URL}icons/icon-192.png`]
         }
-        return true;
-    } catch (err) {
-        console.error('Web3Auth init failed:', err);
-        return false;
-    }
+    });
+
+    // Когда WalletConnect получил URI — открываем MetaMask через deeplink
+    wcProvider.on('display_uri', (uri) => {
+        const encoded = encodeURIComponent(uri);
+        // metamask:// deeplink открывает MetaMask Mobile и сразу подключает
+        window.location.href = `metamask://wc?uri=${encoded}`;
+        // Fallback: если MetaMask не установлен — открываем страницу загрузки
+        setTimeout(() => {
+            window.open('https://metamask.io/download/', '_blank');
+        }, 2000);
+    });
+
+    return wcProvider;
 }
 
 async function connectWallet() {
-    // Инициализируем Web3Auth если нужно (мобильный)
-    const initialized = await initWeb3Auth();
-    if (!initialized) {
-        showNotification(t('install_metamask'), 'error');
-        return;
-    }
-
-    if (!window.ethereum) {
-        // Запускаем Web3Auth modal для входа
-        try {
-            const provider = await web3authProvider.connect();
-            window.ethereum = provider;
-        } catch (err) {
-            showNotification(t('connection_error') + err.message, 'error');
-            return;
-        }
-    }
-
+    // Защита от двойного клика (#3)
+    if (connectWallet._running) return;
+    connectWallet._running = true;
     try {
-        const accounts = await window.ethereum.request({
-            method: 'eth_requestAccounts'
-        });
+        let provider;
 
-        wallet = accounts[0];
+        if (!isMobile && window.ethereum) {
+            // ── ДЕСКТОП: MetaMask extension ──────────────────────────────────
+            provider = window.ethereum;
+        } else if (!isMobile && !window.ethereum) {
+            // ── ДЕСКТОП без MetaMask ──────────────────────────────────────────
+            showNotification('Установите MetaMask: https://metamask.io', 'error');
+            return;
+        } else {
+            // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
+            showNotification('Открываем MetaMask...', 'info');
+            provider = await initWalletConnect();
+            // Критическое #1: await — ждём аккаунты от MetaMask
+            const wcAccounts = await provider.enable();
+            if (wcAccounts && wcAccounts.length > 0) wallet = wcAccounts[0];
+            window.ethereum = provider;
+            // Слушатель смены сети (#4)
+            provider.on('chainChanged', () => window.location.reload());
+        }
+
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        wallet = wallet || accounts[0];
+
         elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
         elements.walletBtn.classList.add('connected');
-
         showNotification(t('metamask_connected'), 'success');
 
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
@@ -390,30 +394,28 @@ async function connectWallet() {
         const nonce   = nonceData.nonce;
         const message = nonceData.message;
 
-        if (!nonce || !message) {
-            throw new Error('Invalid nonce response from server');
-        }
+        if (!nonce || !message) throw new Error('Invalid nonce response from server');
 
-        const signature = await window.ethereum.request({
+        const signature = await provider.request({
             method: 'personal_sign',
             params: [message, wallet]
         });
 
-        if (!signature) {
-            throw new Error('MetaMask did not return signature');
-        }
+        if (!signature) throw new Error('MetaMask did not return signature');
 
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
 
-        if (CONFIG.API_KEY) {
-            await login();
-        }
+        if (CONFIG.API_KEY) await login();
 
     } catch (error) {
-        showNotification(t('connection_error') + error.message, 'error');
+        console.error('connectWallet error:', error);
+        showNotification(t('connection_error') + (error.message || ''), 'error');
+    } finally {
+        connectWallet._running = false;
     }
 }
+
 
 async function login() {
     try {
