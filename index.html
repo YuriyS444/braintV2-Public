@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🧠 BRAIN T₀ v5.0</title>
+    <title>🧠 BRAIN T₀</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="/braintV2-Public/manifest.json">
     <meta name="theme-color" content="#7c6af7">
@@ -12,8 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BRAIN T₀">
-    <!-- Web3Auth Embedded Wallets SDK для мобильных устройств -->
-    <script src="https://cdn.jsdelivr.net/npm/@web3auth/modal@9/dist/modal.umd.min.js"></script>
+    <!-- WalletConnect SDK загружается динамически в client.js при необходимости -->
 </head>
 <body>
     <header>
@@ -21,7 +20,7 @@
             <div class="logo-icon">🧠</div>
             <div class="logo-text">
                 <span class="logo-name">BRAIN</span>
-                <span class="logo-version">T₀ v5.0</span>
+                <span class="logo-version">T₀</span>
             </div>
         </div>
         
@@ -116,7 +115,7 @@
             <div class="messages" id="messages">
                 <div class="welcome-message" id="welcomeMessage">
                     <div class="welcome-icon">🧠</div>
-                    <h1>BRAIN T₀ v5.0</h1>
+                    <h1>BRAIN T₀</h1>
                     <p data-i18n="welcome_stats">69 кристаллов · 9 томов · PostgreSQL · Redis · 2FA · CI/CD</p>
                     <div class="main-formula">1^(∞-1)/2ⁿ = 1</div>
                     <div class="tomes-grid">
@@ -180,11 +179,7 @@
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="settings-group">
-                    <label data-i18n="label_server">🌐 Сервер API</label>
-                    <input type="text" id="serverUrl" placeholder="https://brain-t0.up.railway.app">
-                </div>
-                <div class="settings-group">
+<div class="settings-group">
                     <label data-i18n="label_provider">🤖 Провайдер ключа</label>
                     <select id="keyProvider">
                         <option value="deepseek">🧠 DeepSeek</option>
@@ -218,7 +213,7 @@
     <div id="termsModal" class="terms-modal" style="display: none;">
         <div class="terms-modal-content">
             <div class="terms-modal-header">
-                <h2>🧠 BRAIN T₀ v5.0</h2>
+                <h2>🧠 BRAIN T₀</h2>
                 <h3>Пользовательское соглашение</h3>
             </div>
             <div class="terms-modal-body">
