@@ -286,7 +286,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -313,15 +313,36 @@ async function initWalletConnect() {
     // Загружаем WalletConnect Ethereum Provider из CDN если ещё не загружен
     if (wcProvider) return wcProvider;
 
-    const { EthereumProvider } = window.EthereumProvider
-        ? window
-        : await new Promise((resolve, reject) => {
+    // Загружаем UMD скрипт если его ещё нет на странице
+    const alreadyLoaded = !!(
+        window.WalletConnectEthereumProvider ||
+        window.EthereumProvider ||
+        (window.WalletConnect && window.WalletConnect.EthereumProvider)
+    );
+
+    if (!alreadyLoaded) {
+        await new Promise((resolve, reject) => {
             const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2/dist/index.umd.js';
-            s.onload = () => resolve(window);
-            s.onerror = reject;
+            s.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.13.3/dist/index.umd.js';
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Не удалось загрузить WalletConnect SDK'));
             document.head.appendChild(s);
         });
+    }
+
+    // UMD-бандл может экспортировать объект под разными именами в зависимости от версии —
+    // пробуем все известные варианты
+    const EthereumProvider =
+        window.WalletConnectEthereumProvider?.EthereumProvider ||
+        window.WalletConnectEthereumProvider ||
+        window.EthereumProvider?.EthereumProvider ||
+        window.EthereumProvider ||
+        window.WalletConnect?.EthereumProvider;
+
+    if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+        console.error('WalletConnect globals:', Object.keys(window).filter(k => /wallet|ethereum/i.test(k)));
+        throw new Error('WalletConnect SDK не загрузился корректно');
+    }
 
     wcProvider = await EthereumProvider.init({
         projectId:      WC_PROJECT_ID,
