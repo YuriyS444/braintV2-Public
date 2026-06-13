@@ -224,7 +224,7 @@ const elements = {
 // ============================================================
 // CLI-001: кэш threat — не ходим на сервер чаще чем раз в 15 секунд
 let threatCache = { level: 'low', timestamp: 0 };
-const THREAT_CACHE_TTL = 15000;
+const THREAT_CACHE_TTL = 60000;
 
 const THREAT_MAP = {
     low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
@@ -286,7 +286,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
