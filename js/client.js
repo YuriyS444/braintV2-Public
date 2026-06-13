@@ -313,11 +313,21 @@ async function initWalletConnect() {
     // Загружаем WalletConnect Ethereum Provider из CDN если ещё не загружен
     if (wcProvider) return wcProvider;
 
+    // Polyfill: UMD-бандл WalletConnect написан для Node.js и обращается
+    // к глобальному process.env — в браузере его нет, создаём заглушку
+    if (typeof window.process === 'undefined') {
+        window.process = { env: {} };
+    }
+    if (typeof window.global === 'undefined') {
+        window.global = window;
+    }
+
     // Загружаем UMD скрипт если его ещё нет на странице
+    const wcGlobal = () => window['@walletconnect/ethereum-provider'];
     const alreadyLoaded = !!(
+        wcGlobal() ||
         window.WalletConnectEthereumProvider ||
-        window.EthereumProvider ||
-        (window.WalletConnect && window.WalletConnect.EthereumProvider)
+        window.EthereumProvider
     );
 
     if (!alreadyLoaded) {
@@ -330,14 +340,13 @@ async function initWalletConnect() {
         });
     }
 
-    // UMD-бандл может экспортировать объект под разными именами в зависимости от версии —
-    // пробуем все известные варианты
+    // Реальное имя глобального объекта: window['@walletconnect/ethereum-provider']
+    const wcModule = wcGlobal() || window.WalletConnectEthereumProvider || window.EthereumProvider;
+
     const EthereumProvider =
-        window.WalletConnectEthereumProvider?.EthereumProvider ||
-        window.WalletConnectEthereumProvider ||
-        window.EthereumProvider?.EthereumProvider ||
-        window.EthereumProvider ||
-        window.WalletConnect?.EthereumProvider;
+        wcModule?.EthereumProvider ||
+        wcModule?.default?.EthereumProvider ||
+        wcModule;
 
     if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
         console.error('WalletConnect globals:', Object.keys(window).filter(k => /wallet|ethereum/i.test(k)));
