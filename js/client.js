@@ -404,8 +404,12 @@ async function connectWallet() {
             const wcAccounts = await provider.enable();
             if (wcAccounts && wcAccounts.length > 0) wallet = wcAccounts[0];
             window.ethereum = provider;
-            // Слушатель смены сети (#4)
-            provider.on('chainChanged', () => window.location.reload());
+            // Слушатель смены сети (#4) — игнорируем во время оплаты,
+            // так как processPayment сам переключает сеть на Polygon
+            provider.on('chainChanged', () => {
+                if (window._paymentInProgress) return;
+                window.location.reload();
+            });
         }
 
         const accounts = await provider.request({ method: 'eth_requestAccounts' });
@@ -1106,6 +1110,9 @@ async function processPayment(level, price) {
     if (!confirmed) return null;
 
     try {
+        // Флаг для chainChanged — игнорировать переключение сети во время оплаты
+        window._paymentInProgress = true;
+
         // Переключаемся на Polygon перед оплатой
         try {
             await window.ethereum.request({
@@ -1184,6 +1191,8 @@ async function processPayment(level, price) {
             showNotification('❌ Ошибка: ' + error.message, 'error');
         }
         return null;
+    } finally {
+        window._paymentInProgress = false;
     }
 }
 
