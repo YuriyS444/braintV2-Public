@@ -411,25 +411,21 @@ async function initWalletConnect() {
     // Когда WalletConnect получил URI — открываем MetaMask через deeplink
     wcProvider.on('display_uri', (uri) => {
         const encoded = encodeURIComponent(uri);
-        const deeplink = `metamask://wc?uri=${encoded}`;
 
-        window.location.href = deeplink;
+        // Пробуем window.open — может сработать на некоторых мобильных браузерах
+        const popup = window.open(`metamask://wc?uri=${encoded}`, '_blank');
+        if (!popup || popup.closed) {
+            window.location.href = `metamask://wc?uri=${encoded}`;
+        }
 
-        // Если страница НЕ скрылась за 1.5с — MetaMask не установлен
+        // Fallback: если MetaMask не установлен — открываем страницу загрузки
         const installCheck = setTimeout(() => {
-            if (document.visibilityState === 'visible') {
-                showNotification(t('install_metamask'), 'error');
-                window.open('https://metamask.io/download/', '_blank');
-            }
-        }, 1500);
+            window.open('https://metamask.io/download/', '_blank');
+        }, 2000);
 
-        // ── Возврат пользователя из MetaMask ────────────────────────────────
-        // В одноэкранном режиме при переключении приложений WebSocket-сессия
-        // WalletConnect рвётся, и provider.enable() может зависнуть навсегда.
-        // Поэтому показываем кнопку возврата СРАЗУ, не дожидаясь таймаута —
-        // пользователь сам подскажет когда подписал.
-        showReturnToAppButton();
-
+        // ── Отслеживаем возврат пользователя из MetaMask ────────────────────
+        // Браузер не переключает фокус автоматически после подписи —
+        // показываем уведомление и кнопку когда вкладка снова видима
         const onVisible = () => {
             if (document.visibilityState !== 'visible') return;
             clearTimeout(installCheck);
@@ -438,11 +434,15 @@ async function initWalletConnect() {
             showNotification(t('signature_check'), 'info');
 
             document.removeEventListener('visibilitychange', onVisible);
-
-            const existingBtn = document.getElementById('returnToAppBtn');
-            if (existingBtn) existingBtn.remove();
+            clearTimeout(returnTimeout);
         };
         document.addEventListener('visibilitychange', onVisible);
+
+        // Если пользователь не вернулся за 30 секунд — показываем кнопку
+        const returnTimeout = setTimeout(() => {
+            if (document.visibilityState === 'visible') return;
+            showReturnToAppButton();
+        }, 30000);
     });
 
     return wcProvider;
@@ -480,19 +480,12 @@ function showReturnToAppButton() {
         if (navigator.vibrate) navigator.vibrate(100);
         showNotification(t('signature_check'), 'info');
         btn.remove();
-
-        // WebSocket-сессия WalletConnect могла разорваться при переключении
-        // приложений (одноэкранный режим) — provider.enable() мог зависнуть.
-        // Перезагрузка страницы переподключает сессию: WalletConnect хранит
-        // pairing в localStorage и при повторном connectWallet() быстро
-        // восстанавливает уже подписанную сессию.
-        setTimeout(() => window.location.reload(), 800);
     };
 
     document.body.appendChild(btn);
 
-    // Кнопка остаётся пока пользователь сам не нажмёт —
-    // не убираем по таймауту, так как время подписи непредсказуемо
+    // Кнопка исчезает сама через 60 секунд
+    setTimeout(() => btn.remove(), 60000);
 }
 
 async function connectWallet() {
@@ -500,17 +493,6 @@ async function connectWallet() {
     if (connectWallet._running) return;
     connectWallet._running = true;
     try {
-        // Если пользователь ввёл API ключ, но не нажал "Сохранить" —
-        // подхватываем его из поля автоматически. Без этого CONFIG.API_KEY
-        // останется пустым и login() в конце не вызовется.
-        if (!CONFIG.API_KEY) {
-            const apiKeyInput = document.getElementById('apiKey')?.value?.trim();
-            if (apiKeyInput) {
-                CONFIG.API_KEY = apiKeyInput;
-                sessionStorage.setItem('brain_api_key', apiKeyInput);
-            }
-        }
-
         let provider;
 
         if (!isMobile && window.ethereum) {
