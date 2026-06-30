@@ -59,7 +59,6 @@ const TRANSLATIONS = {
         free: 'Бесплатно',
         // Авторизация
         metamask_connected: '✅ MetaMask подключён',
-        open_metamask: 'Открываем MetaMask...',
         signature_check: '🔍 Проверяем подпись в MetaMask...',
         auth_error: 'Ошибка аутентификации',
         session_expired: 'Сессия истекла. Переподключите MetaMask.',
@@ -148,7 +147,6 @@ const TRANSLATIONS = {
         free: 'Free',
         // Auth
         metamask_connected: '✅ MetaMask connected',
-        open_metamask: 'Open Metamask...',
         signature_check: '🔍 Checking signature in MetaMask...',
         auth_error: 'Authentication error',
         session_expired: 'Session expired. Please reconnect MetaMask.',
@@ -415,6 +413,11 @@ async function initWalletConnect() {
         const encoded = encodeURIComponent(uri);
         // metamask:// deeplink открывает MetaMask Mobile и сразу подключает
         window.location.href = `metamask://wc?uri=${encoded}`;
+        // Fallback: если MetaMask не установлен — открываем страницу загрузки
+        setTimeout(() => {
+            window.open('https://metamask.io/download/', '_blank');
+        }, 2000);
+    });
 
     return wcProvider;
 }
@@ -435,7 +438,7 @@ async function connectWallet() {
             return;
         } else {
             // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
-            showNotification(t('open_metamask'), 'info');
+            showNotification('Открываем Metamask...', 'info');
             provider = await initWalletConnect();
             // Критическое #1: await — ждём аккаунты от MetaMask
             const wcAccounts = await provider.enable();
