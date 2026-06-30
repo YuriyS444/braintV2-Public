@@ -148,7 +148,7 @@ const TRANSLATIONS = {
         free: 'Free',
         // Auth
         metamask_connected: '✅ MetaMask connected',
-        open_metamask: 'Open Metamask...'
+        open_metamask: 'Open Metamask...',
         signature_check: '🔍 Checking signature in MetaMask...',
         auth_error: 'Authentication error',
         session_expired: 'Session expired. Please reconnect MetaMask.',
