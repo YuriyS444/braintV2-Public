@@ -224,7 +224,7 @@ const elements = {
 // ============================================================
 // CLI-001: кэш threat — не ходим на сервер чаще чем раз в 15 секунд
 let threatCache = { level: 'low', timestamp: 0 };
-const THREAT_CACHE_TTL = 15000;
+const THREAT_CACHE_TTL = 60000;
 
 const THREAT_MAP = {
     low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
@@ -298,23 +298,123 @@ function debounce(func, wait) {
     };
 }
 
-async function connectWallet() {
-    if (!window.ethereum) {
-        showNotification(t('install_metamask'), 'error');
-        return;
+// ── WALLETCONNECT + METAMASK DEEPLINK ────────────────────────────────────────
+// Десктоп: window.ethereum (MetaMask extension) — прямой доступ как раньше.
+// Мобильный: WalletConnect v2 с deeplink → открывает MetaMask Mobile напрямую.
+// API идентичен — код оплаты и авторизации не меняется.
+
+const WC_PROJECT_ID = 'd04282c19dc2dafdd36f6f50f81b93d8';
+const DAPP_URL      = 'https://yuriys444.github.io/braintV2-Public/';
+const isMobile      = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+let wcProvider = null;
+
+async function initWalletConnect() {
+    // Загружаем WalletConnect Ethereum Provider из CDN если ещё не загружен
+    if (wcProvider) return wcProvider;
+
+    // Polyfill: UMD-бандл WalletConnect написан для Node.js и обращается
+    // к глобальному process.env — в браузере его нет, создаём заглушку
+    if (typeof window.process === 'undefined') {
+        window.process = { env: {} };
     }
-    
-    try {
-        const accounts = await window.ethereum.request({ 
-            method: 'eth_requestAccounts' 
+    if (typeof window.global === 'undefined') {
+        window.global = window;
+    }
+
+    // Загружаем UMD скрипт если его ещё нет на странице
+    const wcGlobal = () => window['@walletconnect/ethereum-provider'];
+    const alreadyLoaded = !!(
+        wcGlobal() ||
+        window.WalletConnectEthereumProvider ||
+        window.EthereumProvider
+    );
+
+    if (!alreadyLoaded) {
+        await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.13.3/dist/index.umd.js';
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Не удалось загрузить WalletConnect SDK'));
+            document.head.appendChild(s);
         });
-        
-        wallet = accounts[0];
+    }
+
+    // Реальное имя глобального объекта: window['@walletconnect/ethereum-provider']
+    const wcModule = wcGlobal() || window.WalletConnectEthereumProvider || window.EthereumProvider;
+
+    const EthereumProvider =
+        wcModule?.EthereumProvider ||
+        wcModule?.default?.EthereumProvider ||
+        wcModule;
+
+    if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+        console.error('WalletConnect globals:', Object.keys(window).filter(k => /wallet|ethereum/i.test(k)));
+        throw new Error('WalletConnect SDK не загрузился корректно');
+    }
+
+    wcProvider = await EthereumProvider.init({
+        projectId:      WC_PROJECT_ID,
+        chains:         [137],          // Polygon Mainnet — число (#5)
+        showQrModal:    false,
+        rpcMap: {
+            137: 'https://polygon-rpc.com' // публичный RPC
+        },
+        metadata: {
+            name:        'BRAIN T₀',
+            description: 'AI система кристаллизации знаний',
+            url:          DAPP_URL,
+            icons:       [`${DAPP_URL}icons/icon-192.png`]
+        }
+    });
+
+    // Когда WalletConnect получил URI — открываем MetaMask через deeplink
+    wcProvider.on('display_uri', (uri) => {
+        const encoded = encodeURIComponent(uri);
+        // metamask:// deeplink открывает MetaMask Mobile и сразу подключает
+        window.location.href = `metamask://wc?uri=${encoded}`;
+        // Fallback: если MetaMask не установлен — открываем страницу загрузки
+        setTimeout(() => {
+            window.open('https://metamask.io/download/', '_blank');
+        }, 2000);
+    });
+
+    return wcProvider;
+}
+
+async function connectWallet() {
+    // Защита от двойного клика (#3)
+    if (connectWallet._running) return;
+    connectWallet._running = true;
+    try {
+        let provider;
+
+        if (!isMobile && window.ethereum) {
+            // ── ДЕСКТОП: MetaMask extension ──────────────────────────────────
+            provider = window.ethereum;
+        } else if (!isMobile && !window.ethereum) {
+            // ── ДЕСКТОП без MetaMask ──────────────────────────────────────────
+            showNotification('Установите MetaMask: https://metamask.io', 'error');
+            return;
+        } else {
+            // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
+            showNotification('Открываем MetaMask...', 'info');
+            provider = await initWalletConnect();
+            // Критическое #1: await — ждём аккаунты от MetaMask
+            const wcAccounts = await provider.enable();
+            if (wcAccounts && wcAccounts.length > 0) wallet = wcAccounts[0];
+            window.ethereum = provider;
+            // Слушатель смены сети (#4)
+            provider.on('chainChanged', () => window.location.reload());
+        }
+
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        wallet = wallet || accounts[0];
+
         elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
         elements.walletBtn.classList.add('connected');
-        
         showNotification(t('metamask_connected'), 'success');
-        
+
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
         if (!nonceRes.ok) {
             const err = await nonceRes.json().catch(() => ({}));
@@ -324,30 +424,28 @@ async function connectWallet() {
         const nonce   = nonceData.nonce;
         const message = nonceData.message;
 
-        if (!nonce || !message) {
-            throw new Error('Invalid nonce response from server');
-        }
+        if (!nonce || !message) throw new Error('Invalid nonce response from server');
 
-        const signature = await window.ethereum.request({
+        const signature = await provider.request({
             method: 'personal_sign',
             params: [message, wallet]
         });
 
-        if (!signature) {
-            throw new Error('MetaMask did not return signature');
-        }
-        
+        if (!signature) throw new Error('MetaMask did not return signature');
+
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
-        
-        if (CONFIG.API_KEY) {
-            await login();
-        }
-        
+
+        if (CONFIG.API_KEY) await login();
+
     } catch (error) {
-        showNotification(t('connection_error') + error.message, 'error');
+        console.error('connectWallet error:', error);
+        showNotification(t('connection_error') + (error.message || ''), 'error');
+    } finally {
+        connectWallet._running = false;
     }
 }
+
 
 async function login() {
     try {
@@ -362,7 +460,6 @@ async function login() {
             throw new Error(t('apikey_not_set'));
         }
 
-        // Если wallet не восстановлен — просим переподключить MetaMask
         if (!wallet) {
             throw new Error(t('wallet_not_connected'));
         }
@@ -377,7 +474,7 @@ async function login() {
                 nonce
             })
         });
-        
+
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.error || `Login failed (${response.status})`);
@@ -386,24 +483,27 @@ async function login() {
         const data = await response.json();
         token = data.token;
         isArchitect = data.isArchitect;
-        
+
         sessionStorage.setItem('brain_token', token);
-        
+
         sessionStorage.removeItem('wallet_nonce');
         sessionStorage.removeItem('wallet_signature');
-        
+
         if (isArchitect) {
             elements.architectBadge.style.display = 'inline-block';
             showNotification(t('architect_activated'), 'success');
         }
-        
+
         await loadCrystals();
-        
+
     } catch (error) {
         console.error('Login error:', error);
         showNotification(t('auth_error'), 'error');
     }
 }
+
+
+
 
 async function verifyToken() {
     try {
