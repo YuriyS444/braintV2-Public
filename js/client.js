@@ -59,7 +59,6 @@ const TRANSLATIONS = {
         free: 'Бесплатно',
         // Авторизация
         metamask_connected: '✅ MetaMask подключён',
-        signature_check: '🔍 Проверяем подпись в MetaMask...',
         auth_error: 'Ошибка аутентификации',
         session_expired: 'Сессия истекла. Переподключите MetaMask.',
         apikey_not_set: 'API ключ не задан. Добавьте в настройках.',
@@ -95,25 +94,6 @@ const TRANSLATIONS = {
         filter_science: '🔬 Научный',
         filter_strict: '🔴 Строгий',
         filter_mode_set: 'Режим фильтрации',
-        // Личный кабинет
-        profile_loading: '⏳ Загрузка...',
-        profile_load_error: 'Не удалось загрузить профиль',
-        profile_no_limits: 'Нет ограничений на сегодня',
-        profile_no_payments: 'Платежей пока нет',
-        profile_architect: 'Архитектор',
-        profile_user: 'Пользователь',
-        profile_copy_address: 'Скопировать адрес',
-        profile_registration: '📅 Регистрация',
-        profile_last_login: '🕐 Последний вход',
-        profile_total_queries: '❓ Всего запросов',
-        profile_total_spent: '💸 Потрачено',
-        profile_my_crystals: '💎 Мои кристаллы',
-        profile_total: 'всего',
-        profile_diamond: '💎 кристалл',
-        profile_today: 'сегодня',
-        profile_limits_today: '📊 Лимиты сегодня',
-        profile_reset_hint: '🔄 Сбрасываются в полночь UTC',
-        profile_payment_history: '💰 История платежей',
     },
     en: {
         // Navigation
@@ -147,7 +127,6 @@ const TRANSLATIONS = {
         free: 'Free',
         // Auth
         metamask_connected: '✅ MetaMask connected',
-        signature_check: '🔍 Checking signature in MetaMask...',
         auth_error: 'Authentication error',
         session_expired: 'Session expired. Please reconnect MetaMask.',
         apikey_not_set: 'API key not set. Please add your key in settings.',
@@ -183,25 +162,6 @@ const TRANSLATIONS = {
         filter_science: '🔬 Science',
         filter_strict: '🔴 Strict',
         filter_mode_set: 'Filter mode',
-        // Profile / Account
-        profile_loading: '⏳ Loading...',
-        profile_load_error: 'Failed to load profile',
-        profile_no_limits: 'No limits today',
-        profile_no_payments: 'No payments yet',
-        profile_architect: 'Architect',
-        profile_user: 'User',
-        profile_copy_address: 'Copy address',
-        profile_registration: '📅 Registered',
-        profile_last_login: '🕐 Last login',
-        profile_total_queries: '❓ Total queries',
-        profile_total_spent: '💸 Spent',
-        profile_my_crystals: '💎 My crystals',
-        profile_total: 'total',
-        profile_diamond: '💎 diamond',
-        profile_today: 'today',
-        profile_limits_today: '📊 Limits today',
-        profile_reset_hint: '🔄 Resets at midnight UTC',
-        profile_payment_history: '💰 Payment history',
     }
 };
 
@@ -326,7 +286,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -338,193 +298,23 @@ function debounce(func, wait) {
     };
 }
 
-// ── WALLETCONNECT + METAMASK DEEPLINK ────────────────────────────────────────
-// Десктоп: window.ethereum (MetaMask extension) — прямой доступ как раньше.
-// Мобильный: WalletConnect v2 с deeplink → открывает MetaMask Mobile напрямую.
-// API идентичен — код оплаты и авторизации не меняется.
-
-const WC_PROJECT_ID = 'd04282c19dc2dafdd36f6f50f81b93d8';
-const DAPP_URL      = 'https://yuriys444.github.io/braintV2-Public/';
-const isMobile      = /Android|iPhone|iPad/i.test(navigator.userAgent);
-
-let wcProvider = null;
-
-async function initWalletConnect() {
-    // Загружаем WalletConnect Ethereum Provider из CDN если ещё не загружен
-    if (wcProvider) return wcProvider;
-
-    // Polyfill: UMD-бандл WalletConnect написан для Node.js и обращается
-    // к глобальному process.env — в браузере его нет, создаём заглушку
-    if (typeof window.process === 'undefined') {
-        window.process = { env: {} };
-    }
-    if (typeof window.global === 'undefined') {
-        window.global = window;
-    }
-
-    // Загружаем UMD скрипт если его ещё нет на странице
-    const wcGlobal = () => window['@walletconnect/ethereum-provider'];
-    const alreadyLoaded = !!(
-        wcGlobal() ||
-        window.WalletConnectEthereumProvider ||
-        window.EthereumProvider
-    );
-
-    if (!alreadyLoaded) {
-        await new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.13.3/dist/index.umd.js';
-            s.onload = () => resolve();
-            s.onerror = () => reject(new Error('Не удалось загрузить WalletConnect SDK'));
-            document.head.appendChild(s);
-        });
-    }
-
-    // Реальное имя глобального объекта: window['@walletconnect/ethereum-provider']
-    const wcModule = wcGlobal() || window.WalletConnectEthereumProvider || window.EthereumProvider;
-
-    const EthereumProvider =
-        wcModule?.EthereumProvider ||
-        wcModule?.default?.EthereumProvider ||
-        wcModule;
-
-    if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
-        console.error('WalletConnect globals:', Object.keys(window).filter(k => /wallet|ethereum/i.test(k)));
-        throw new Error('WalletConnect SDK не загрузился корректно');
-    }
-
-    wcProvider = await EthereumProvider.init({
-        projectId:      WC_PROJECT_ID,
-        chains:         [137],          // Polygon Mainnet — число (#5)
-        showQrModal:    false,
-        rpcMap: {
-            137: 'https://polygon-rpc.com' // публичный RPC
-        },
-        metadata: {
-            name:        'BRAIN T₀',
-            description: 'AI система кристаллизации знаний',
-            url:          DAPP_URL,
-            icons:       [`${DAPP_URL}icons/icon-192.png`]
-        }
-    });
-
-    // Когда WalletConnect получил URI — открываем MetaMask через deeplink
-    wcProvider.on('display_uri', (uri) => {
-        const encoded = encodeURIComponent(uri);
-
-        // Пробуем window.open — может сработать на некоторых мобильных браузерах
-        const popup = window.open(`metamask://wc?uri=${encoded}`, '_blank');
-        if (!popup || popup.closed) {
-            window.location.href = `metamask://wc?uri=${encoded}`;
-        }
-
-        // Fallback: если MetaMask не установлен — открываем страницу загрузки
-        const installCheck = setTimeout(() => {
-            window.open('https://metamask.io/download/', '_blank');
-        }, 2000);
-
-        // ── Отслеживаем возврат пользователя из MetaMask ────────────────────
-        // Браузер не переключает фокус автоматически после подписи —
-        // показываем уведомление и кнопку когда вкладка снова видима
-        const onVisible = () => {
-            if (document.visibilityState !== 'visible') return;
-            clearTimeout(installCheck);
-
-            if (navigator.vibrate) navigator.vibrate(200);
-            showNotification(t('signature_check'), 'info');
-
-            document.removeEventListener('visibilitychange', onVisible);
-            clearTimeout(returnTimeout);
-        };
-        document.addEventListener('visibilitychange', onVisible);
-
-        // Если пользователь не вернулся за 30 секунд — показываем кнопку
-        const returnTimeout = setTimeout(() => {
-            if (document.visibilityState === 'visible') return;
-            showReturnToAppButton();
-        }, 30000);
-    });
-
-    return wcProvider;
-}
-
-// Кнопка "Я вернулся" — для случаев когда автоопределение возврата не сработало
-function showReturnToAppButton() {
-    if (document.getElementById('returnToAppBtn')) return; // уже показана
-
-    const btn = document.createElement('button');
-    btn.id = 'returnToAppBtn';
-    btn.textContent = '✅ Я подписал в MetaMask — вернуться';
-    btn.style.cssText = `
-        position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-        z-index: 9999; padding: 14px 24px; border-radius: 12px;
-        background: #7c6af7; color: #fff; border: none;
-        font-size: 15px; font-weight: 600; cursor: pointer;
-        box-shadow: 0 4px 20px rgba(124,106,247,0.4);
-        animation: slideIn 0.3s ease-out;
-    `;
-
-    if (!document.getElementById('returnBtnStyle')) {
-        const style = document.createElement('style');
-        style.id = 'returnBtnStyle';
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translate(-50%, 100%); opacity: 0; }
-                to   { transform: translate(-50%, 0);    opacity: 1; }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    btn.onclick = () => {
-        if (navigator.vibrate) navigator.vibrate(100);
-        showNotification(t('signature_check'), 'info');
-        btn.remove();
-    };
-
-    document.body.appendChild(btn);
-
-    // Кнопка исчезает сама через 60 секунд
-    setTimeout(() => btn.remove(), 60000);
-}
-
 async function connectWallet() {
-    // Защита от двойного клика (#3)
-    if (connectWallet._running) return;
-    connectWallet._running = true;
+    if (!window.ethereum) {
+        showNotification(t('install_metamask'), 'error');
+        return;
+    }
+    
     try {
-        let provider;
-
-        if (!isMobile && window.ethereum) {
-            // ── ДЕСКТОП: MetaMask extension ──────────────────────────────────
-            provider = window.ethereum;
-        } else if (!isMobile && !window.ethereum) {
-            // ── ДЕСКТОП без MetaMask ──────────────────────────────────────────
-            showNotification('Установите MetaMask: https://metamask.io', 'error');
-            return;
-        } else {
-            // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
-            showNotification('Открываем MetaMask...', 'info');
-            provider = await initWalletConnect();
-            // Критическое #1: await — ждём аккаунты от MetaMask
-            const wcAccounts = await provider.enable();
-            if (wcAccounts && wcAccounts.length > 0) wallet = wcAccounts[0];
-            window.ethereum = provider;
-            // Слушатель смены сети (#4) — игнорируем во время оплаты,
-            // так как processPayment сам переключает сеть на Polygon
-            provider.on('chainChanged', () => {
-                if (window._paymentInProgress) return;
-                window.location.reload();
-            });
-        }
-
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-        wallet = wallet || accounts[0];
-
+        const accounts = await window.ethereum.request({ 
+            method: 'eth_requestAccounts' 
+        });
+        
+        wallet = accounts[0];
         elements.walletBtn.textContent = `🦊 ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
         elements.walletBtn.classList.add('connected');
+        
         showNotification(t('metamask_connected'), 'success');
-
+        
         const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
         if (!nonceRes.ok) {
             const err = await nonceRes.json().catch(() => ({}));
@@ -534,28 +324,30 @@ async function connectWallet() {
         const nonce   = nonceData.nonce;
         const message = nonceData.message;
 
-        if (!nonce || !message) throw new Error('Invalid nonce response from server');
+        if (!nonce || !message) {
+            throw new Error('Invalid nonce response from server');
+        }
 
-        const signature = await provider.request({
+        const signature = await window.ethereum.request({
             method: 'personal_sign',
             params: [message, wallet]
         });
 
-        if (!signature) throw new Error('MetaMask did not return signature');
-
+        if (!signature) {
+            throw new Error('MetaMask did not return signature');
+        }
+        
         sessionStorage.setItem('wallet_nonce', nonce);
         sessionStorage.setItem('wallet_signature', signature);
-
-        if (CONFIG.API_KEY) await login();
-
+        
+        if (CONFIG.API_KEY) {
+            await login();
+        }
+        
     } catch (error) {
-        console.error('connectWallet error:', error);
-        showNotification(t('connection_error') + (error.message || ''), 'error');
-    } finally {
-        connectWallet._running = false;
+        showNotification(t('connection_error') + error.message, 'error');
     }
 }
-
 
 async function login() {
     try {
@@ -570,6 +362,7 @@ async function login() {
             throw new Error(t('apikey_not_set'));
         }
 
+        // Если wallet не восстановлен — просим переподключить MetaMask
         if (!wallet) {
             throw new Error(t('wallet_not_connected'));
         }
@@ -584,7 +377,7 @@ async function login() {
                 nonce
             })
         });
-
+        
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.error || `Login failed (${response.status})`);
@@ -593,27 +386,24 @@ async function login() {
         const data = await response.json();
         token = data.token;
         isArchitect = data.isArchitect;
-
+        
         sessionStorage.setItem('brain_token', token);
-
+        
         sessionStorage.removeItem('wallet_nonce');
         sessionStorage.removeItem('wallet_signature');
-
+        
         if (isArchitect) {
             elements.architectBadge.style.display = 'inline-block';
             showNotification(t('architect_activated'), 'success');
         }
-
+        
         await loadCrystals();
-
+        
     } catch (error) {
         console.error('Login error:', error);
         showNotification(t('auth_error'), 'error');
     }
 }
-
-
-
 
 async function verifyToken() {
     try {
@@ -1216,9 +1006,6 @@ async function processPayment(level, price) {
     if (!confirmed) return null;
 
     try {
-        // Флаг для chainChanged — игнорировать переключение сети во время оплаты
-        window._paymentInProgress = true;
-
         // Переключаемся на Polygon перед оплатой
         try {
             await window.ethereum.request({
@@ -1297,8 +1084,6 @@ async function processPayment(level, price) {
             showNotification('❌ Ошибка: ' + error.message, 'error');
         }
         return null;
-    } finally {
-        window._paymentInProgress = false;
     }
 }
 
@@ -1471,7 +1256,7 @@ function finalizeAssistantMessage(id, crystal) {
 
 
 // ============================================================
-// Debounce [F11]
+// v5.0: Debounce [F11]
 // ============================================================
 // debounce определён выше
 
@@ -1652,7 +1437,7 @@ async function loadLevelOptions() {
 }
 
 // ============================================================
-// Пользовательское соглашение
+// v5.0: Пользовательское соглашение
 // ============================================================
 const TERMS_VERSION = 'v5.0-2026-03-11';
 
@@ -1750,12 +1535,14 @@ function closeSettings() {
 }
 
 async function saveSettings() {
+    const serverUrl   = document.getElementById('serverUrl')?.value?.trim();
     const apiKey      = document.getElementById('apiKey')?.value?.trim();
     const archKey     = document.getElementById('architectKey')?.value?.trim();
     const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
     // Сохраняем локально
+    if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
     // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
@@ -1843,6 +1630,9 @@ async function deleteKey(provider) {
 openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
+    // Заполнить поля текущими значениями
+    const su = document.getElementById('serverUrl');
+    if (su) su.value = CONFIG.API_URL || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
@@ -1872,7 +1662,7 @@ function clearHistory() {
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
     else {
-        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀</h1></div>';
+        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀ v5.0</h1></div>';
     }
     history.length = 0;
     sessionStorage.removeItem('brain_history');
@@ -2667,13 +2457,13 @@ function closeProfile() {
 
 async function loadProfile() {
     const body = document.getElementById('profileBody');
-    body.innerHTML = `<div style="text-align:center;padding:40px;opacity:.5">${t('profile_loading')}</div>`;
+    body.innerHTML = '<div style="text-align:center;padding:40px;opacity:.5">⏳ Загрузка...</div>';
 
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) throw new Error(t('profile_load_error'));
+        if (!res.ok) throw new Error('Не удалось загрузить профиль');
         const d = await res.json();
         const p = d.profile;
         const c = d.crystals;
@@ -2690,7 +2480,7 @@ async function loadProfile() {
                 </div>
                 <span class="profile-limit-text">${l.used} / ${l.limit}</span>
             </div>`;
-        }).join('') || `<div class="profile-empty">${t('profile_no_limits')}</div>`;
+        }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
 
         // История платежей
         const paymentsHtml = d.payments.length
@@ -2704,7 +2494,7 @@ async function loadProfile() {
                     🔗 TX
                 </a>
             </div>`).join('')
-            : `<div class="profile-empty">${t('profile_no_payments')}</div>`;
+            : '<div class="profile-empty">Платежей пока нет</div>';
 
         body.innerHTML = `
         <div class="profile-grid">
@@ -2717,39 +2507,39 @@ async function loadProfile() {
                         <div class="profile-wallet-addr" title="${p.wallet}">
                             ${p.wallet?.slice(0,10)}...${p.wallet?.slice(-6)}
                         </div>
-                        <div class="profile-role">${p.is_architect ? t('profile_architect') : t('profile_user')}</div>
+                        <div class="profile-role">${p.is_architect ? 'Архитектор' : 'Пользователь'}</div>
                     </div>
-                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="${t('profile_copy_address')}">📋</button>
+                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="Скопировать адрес">📋</button>
                 </div>
                 <div class="profile-stat-row">
-                    <span>${t('profile_registration')}</span>
+                    <span>📅 Регистрация</span>
                     <b>${new Date(p.created_at).toLocaleDateString()}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>${t('profile_last_login')}</span>
+                    <span>🕐 Последний вход</span>
                     <b>${p.last_login ? new Date(p.last_login).toLocaleDateString() : '—'}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>${t('profile_total_queries')}</span>
+                    <span>❓ Всего запросов</span>
                     <b>${p.total_queries}</b>
                 </div>
                 <div class="profile-stat-row highlight">
-                    <span>${t('profile_total_spent')}</span>
+                    <span>💸 Потрачено</span>
                     <b>$${p.total_spent}</b>
                 </div>
             </div>
 
             <!-- Кристаллы -->
             <div class="profile-card">
-                <div class="profile-card-title">${t('profile_my_crystals')}</div>
+                <div class="profile-card-title">💎 Мои кристаллы</div>
                 <div class="profile-crystals-grid">
                     <div class="profile-crystal-stat">
                         <span class="profile-crystal-num">${c.total}</span>
-                        <span class="profile-crystal-label">${t('profile_total')}</span>
+                        <span class="profile-crystal-label">всего</span>
                     </div>
                     <div class="profile-crystal-stat diamonds">
                         <span class="profile-crystal-num">${c.diamonds}</span>
-                        <span class="profile-crystal-label">${t('profile_diamond')}</span>
+                        <span class="profile-crystal-label">💎 кристалл</span>
                     </div>
                     <div class="profile-crystal-stat verified">
                         <span class="profile-crystal-num">${c.verified}</span>
@@ -2765,21 +2555,21 @@ async function loadProfile() {
                     </div>
                     <div class="profile-crystal-stat today">
                         <span class="profile-crystal-num">${c.today}</span>
-                        <span class="profile-crystal-label">${t('profile_today')}</span>
+                        <span class="profile-crystal-label">сегодня</span>
                     </div>
                 </div>
             </div>
 
             <!-- Дневные лимиты -->
             <div class="profile-card">
-                <div class="profile-card-title">${t('profile_limits_today')}</div>
+                <div class="profile-card-title">📊 Лимиты сегодня</div>
                 <div class="profile-limits">${limitsHtml}</div>
-                <div class="profile-reset-hint">${t('profile_reset_hint')}</div>
+                <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
             </div>
 
             <!-- История платежей -->
             <div class="profile-card profile-card-wide">
-                <div class="profile-card-title">${t('profile_payment_history')}</div>
+                <div class="profile-card-title">💰 История платежей</div>
                 <div class="profile-payments">${paymentsHtml}</div>
             </div>
 
