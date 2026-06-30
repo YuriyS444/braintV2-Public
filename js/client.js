@@ -50,7 +50,7 @@ const TRANSLATIONS = {
         copied: '✅ Скопировано',
         copy_error: '❌ Ошибка копирования',
         auth_required: 'Необходима авторизация через MetaMask',
-        connect_to_signin: 'Подключите MetaMask для входа',
+        connect_to_signin: 'Сохраните ключ от провайдера(ИИ) в настройках',
         files_unavailable: 'Файлы недоступны на этом уровне',
         stop_generation: '⏹ Генерация остановлена',
         retry: '🔄 Повторить',
@@ -138,7 +138,7 @@ const TRANSLATIONS = {
         copied: '✅ Copied',
         copy_error: '❌ Copy error',
         auth_required: 'MetaMask authorization required',
-        connect_to_signin: 'Connect MetaMask to sign in',
+        connect_to_signin: 'Save the provider (AI) key in the settings.',
         files_unavailable: 'Files not available at this level',
         stop_generation: '⏹ Generation stopped',
         retry: '🔄 Retry',
@@ -2593,7 +2593,6 @@ function updateLevelSelect(level, price) {
 async function openProfile() {
     if (!token) {
         showNotification(t('connect_to_signin'), 'info');
-        await connectWallet();
         return;
     }
     document.getElementById('profileModal').style.display = 'flex';
