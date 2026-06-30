@@ -2649,31 +2649,31 @@ async function loadProfile() {
         <div class="profile-grid">
 
             <!-- Профиль -->
-            <div class="profile-card">
+             <div class="profile-card">
                 <div class="profile-wallet">
                     <span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span>
                     <div>
                         <div class="profile-wallet-addr" title="${p.wallet}">
                             ${p.wallet?.slice(0,10)}...${p.wallet?.slice(-6)}
                         </div>
-                        <div class="profile-role">${p.is_architect ? 'Архитектор' : 'Пользователь'}</div>
+                        <div class="profile-role">${p.is_architect ? t('profile_architect') : t('profile_user')}</div>
                     </div>
-                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="Скопировать адрес">📋</button>
+                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="${t('profile_copy_address')}">📋</button>
                 </div>
                 <div class="profile-stat-row">
-                    <span>📅 Регистрация</span>
+                    <span>${t('profile_registration')}</span>
                     <b>${new Date(p.created_at).toLocaleDateString()}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>🕐 Последний вход</span>
+                    <span>${t('profile_last_login')}</span>
                     <b>${p.last_login ? new Date(p.last_login).toLocaleDateString() : '—'}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>❓ Всего запросов</span>
+                    <span>${t('profile_total_queries')}</span>
                     <b>${p.total_queries}</b>
                 </div>
                 <div class="profile-stat-row highlight">
-                    <span>💸 Потрачено</span>
+                    <span>${t('profile_total_spent')}</span>
                     <b>$${p.total_spent}</b>
                 </div>
             </div>
