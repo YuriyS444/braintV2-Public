@@ -59,6 +59,7 @@ const TRANSLATIONS = {
         free: 'Бесплатно',
         // Авторизация
         metamask_connected: '✅ MetaMask подключён',
+        signature_check: '🔍 Проверяем подпись в MetaMask...',
         auth_error: 'Ошибка аутентификации',
         session_expired: 'Сессия истекла. Переподключите MetaMask.',
         apikey_not_set: 'API ключ не задан. Добавьте в настройках.',
@@ -94,6 +95,25 @@ const TRANSLATIONS = {
         filter_science: '🔬 Научный',
         filter_strict: '🔴 Строгий',
         filter_mode_set: 'Режим фильтрации',
+        // Личный кабинет
+        profile_loading: '⏳ Загрузка...',
+        profile_load_error: 'Не удалось загрузить профиль',
+        profile_no_limits: 'Нет ограничений на сегодня',
+        profile_no_payments: 'Платежей пока нет',
+        profile_architect: 'Архитектор',
+        profile_user: 'Пользователь',
+        profile_copy_address: 'Скопировать адрес',
+        profile_registration: '📅 Регистрация',
+        profile_last_login: '🕐 Последний вход',
+        profile_total_queries: '❓ Всего запросов',
+        profile_total_spent: '💸 Потрачено',
+        profile_my_crystals: '💎 Мои кристаллы',
+        profile_total: 'всего',
+        profile_diamond: '💎 кристалл',
+        profile_today: 'сегодня',
+        profile_limits_today: '📊 Лимиты сегодня',
+        profile_reset_hint: '🔄 Сбрасываются в полночь UTC',
+        profile_payment_history: '💰 История платежей',
     },
     en: {
         // Navigation
@@ -127,6 +147,7 @@ const TRANSLATIONS = {
         free: 'Free',
         // Auth
         metamask_connected: '✅ MetaMask connected',
+        signature_check: '🔍 Checking signature in MetaMask...',
         auth_error: 'Authentication error',
         session_expired: 'Session expired. Please reconnect MetaMask.',
         apikey_not_set: 'API key not set. Please add your key in settings.',
@@ -162,6 +183,25 @@ const TRANSLATIONS = {
         filter_science: '🔬 Science',
         filter_strict: '🔴 Strict',
         filter_mode_set: 'Filter mode',
+        // Profile / Account
+        profile_loading: '⏳ Loading...',
+        profile_load_error: 'Failed to load profile',
+        profile_no_limits: 'No limits today',
+        profile_no_payments: 'No payments yet',
+        profile_architect: 'Architect',
+        profile_user: 'User',
+        profile_copy_address: 'Copy address',
+        profile_registration: '📅 Registered',
+        profile_last_login: '🕐 Last login',
+        profile_total_queries: '❓ Total queries',
+        profile_total_spent: '💸 Spent',
+        profile_my_crystals: '💎 My crystals',
+        profile_total: 'total',
+        profile_diamond: '💎 diamond',
+        profile_today: 'today',
+        profile_limits_today: '📊 Limits today',
+        profile_reset_hint: '🔄 Resets at midnight UTC',
+        profile_payment_history: '💰 Payment history',
     }
 };
 
@@ -224,7 +264,7 @@ const elements = {
 // ============================================================
 // CLI-001: кэш threat — не ходим на сервер чаще чем раз в 15 секунд
 let threatCache = { level: 'low', timestamp: 0 };
-const THREAT_CACHE_TTL = 60000;
+const THREAT_CACHE_TTL = 15000;
 
 const THREAT_MAP = {
     low:    { icon: '🟢', title: 'Угрозы не обнаружены' },
@@ -286,7 +326,7 @@ async function init() {
     elements.levelSelect?.addEventListener('change', updateFileHint);
     elements.providerSelect?.addEventListener('change', () => { updateFileAccept(); updateFileHint(); });
     
-    const threatInterval = setInterval(updateThreatIndicator, 60000); // CLI-001: 15с вместо 5с
+    const threatInterval = setInterval(updateThreatIndicator, 15000); // CLI-001: 15с вместо 5с
     window.addEventListener('beforeunload', () => clearInterval(threatInterval));
 }
 
@@ -371,15 +411,81 @@ async function initWalletConnect() {
     // Когда WalletConnect получил URI — открываем MetaMask через deeplink
     wcProvider.on('display_uri', (uri) => {
         const encoded = encodeURIComponent(uri);
-        // metamask:// deeplink открывает MetaMask Mobile и сразу подключает
-        window.location.href = `metamask://wc?uri=${encoded}`;
+
+        // Пробуем window.open — может сработать на некоторых мобильных браузерах
+        const popup = window.open(`metamask://wc?uri=${encoded}`, '_blank');
+        if (!popup || popup.closed) {
+            window.location.href = `metamask://wc?uri=${encoded}`;
+        }
+
         // Fallback: если MetaMask не установлен — открываем страницу загрузки
-        setTimeout(() => {
+        const installCheck = setTimeout(() => {
             window.open('https://metamask.io/download/', '_blank');
         }, 2000);
+
+        // ── Отслеживаем возврат пользователя из MetaMask ────────────────────
+        // Браузер не переключает фокус автоматически после подписи —
+        // показываем уведомление и кнопку когда вкладка снова видима
+        const onVisible = () => {
+            if (document.visibilityState !== 'visible') return;
+            clearTimeout(installCheck);
+
+            if (navigator.vibrate) navigator.vibrate(200);
+            showNotification(t('signature_check'), 'info');
+
+            document.removeEventListener('visibilitychange', onVisible);
+            clearTimeout(returnTimeout);
+        };
+        document.addEventListener('visibilitychange', onVisible);
+
+        // Если пользователь не вернулся за 30 секунд — показываем кнопку
+        const returnTimeout = setTimeout(() => {
+            if (document.visibilityState === 'visible') return;
+            showReturnToAppButton();
+        }, 30000);
     });
 
     return wcProvider;
+}
+
+// Кнопка "Я вернулся" — для случаев когда автоопределение возврата не сработало
+function showReturnToAppButton() {
+    if (document.getElementById('returnToAppBtn')) return; // уже показана
+
+    const btn = document.createElement('button');
+    btn.id = 'returnToAppBtn';
+    btn.textContent = '✅ Я подписал в MetaMask — вернуться';
+    btn.style.cssText = `
+        position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+        z-index: 9999; padding: 14px 24px; border-radius: 12px;
+        background: #7c6af7; color: #fff; border: none;
+        font-size: 15px; font-weight: 600; cursor: pointer;
+        box-shadow: 0 4px 20px rgba(124,106,247,0.4);
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    if (!document.getElementById('returnBtnStyle')) {
+        const style = document.createElement('style');
+        style.id = 'returnBtnStyle';
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translate(-50%, 100%); opacity: 0; }
+                to   { transform: translate(-50%, 0);    opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    btn.onclick = () => {
+        if (navigator.vibrate) navigator.vibrate(100);
+        showNotification(t('signature_check'), 'info');
+        btn.remove();
+    };
+
+    document.body.appendChild(btn);
+
+    // Кнопка исчезает сама через 60 секунд
+    setTimeout(() => btn.remove(), 60000);
 }
 
 async function connectWallet() {
@@ -1365,7 +1471,7 @@ function finalizeAssistantMessage(id, crystal) {
 
 
 // ============================================================
-// v5.0: Debounce [F11]
+// Debounce [F11]
 // ============================================================
 // debounce определён выше
 
@@ -1546,7 +1652,7 @@ async function loadLevelOptions() {
 }
 
 // ============================================================
-// v5.0: Пользовательское соглашение
+// Пользовательское соглашение
 // ============================================================
 const TERMS_VERSION = 'v5.0-2026-03-11';
 
@@ -1644,14 +1750,12 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-    const serverUrl   = document.getElementById('serverUrl')?.value?.trim();
     const apiKey      = document.getElementById('apiKey')?.value?.trim();
     const archKey     = document.getElementById('architectKey')?.value?.trim();
     const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
     // Сохраняем локально
-    if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
     // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
@@ -1739,9 +1843,6 @@ async function deleteKey(provider) {
 openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
-    // Заполнить поля текущими значениями
-    const su = document.getElementById('serverUrl');
-    if (su) su.value = CONFIG.API_URL || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
@@ -1771,7 +1872,7 @@ function clearHistory() {
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
     else {
-        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀ v5.0</h1></div>';
+        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀</h1></div>';
     }
     history.length = 0;
     sessionStorage.removeItem('brain_history');
@@ -2566,13 +2667,13 @@ function closeProfile() {
 
 async function loadProfile() {
     const body = document.getElementById('profileBody');
-    body.innerHTML = '<div style="text-align:center;padding:40px;opacity:.5">⏳ Загрузка...</div>';
+    body.innerHTML = `<div style="text-align:center;padding:40px;opacity:.5">${t('profile_loading')}</div>`;
 
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) throw new Error('Не удалось загрузить профиль');
+        if (!res.ok) throw new Error(t('profile_load_error'));
         const d = await res.json();
         const p = d.profile;
         const c = d.crystals;
@@ -2589,7 +2690,7 @@ async function loadProfile() {
                 </div>
                 <span class="profile-limit-text">${l.used} / ${l.limit}</span>
             </div>`;
-        }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
+        }).join('') || `<div class="profile-empty">${t('profile_no_limits')}</div>`;
 
         // История платежей
         const paymentsHtml = d.payments.length
@@ -2603,7 +2704,7 @@ async function loadProfile() {
                     🔗 TX
                 </a>
             </div>`).join('')
-            : '<div class="profile-empty">Платежей пока нет</div>';
+            : `<div class="profile-empty">${t('profile_no_payments')}</div>`;
 
         body.innerHTML = `
         <div class="profile-grid">
@@ -2616,39 +2717,39 @@ async function loadProfile() {
                         <div class="profile-wallet-addr" title="${p.wallet}">
                             ${p.wallet?.slice(0,10)}...${p.wallet?.slice(-6)}
                         </div>
-                        <div class="profile-role">${p.is_architect ? 'Архитектор' : 'Пользователь'}</div>
+                        <div class="profile-role">${p.is_architect ? t('profile_architect') : t('profile_user')}</div>
                     </div>
-                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="Скопировать адрес">📋</button>
+                    <button class="profile-copy-btn" onclick="copyToClipboard('${p.wallet}')" title="${t('profile_copy_address')}">📋</button>
                 </div>
                 <div class="profile-stat-row">
-                    <span>📅 Регистрация</span>
+                    <span>${t('profile_registration')}</span>
                     <b>${new Date(p.created_at).toLocaleDateString()}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>🕐 Последний вход</span>
+                    <span>${t('profile_last_login')}</span>
                     <b>${p.last_login ? new Date(p.last_login).toLocaleDateString() : '—'}</b>
                 </div>
                 <div class="profile-stat-row">
-                    <span>❓ Всего запросов</span>
+                    <span>${t('profile_total_queries')}</span>
                     <b>${p.total_queries}</b>
                 </div>
                 <div class="profile-stat-row highlight">
-                    <span>💸 Потрачено</span>
+                    <span>${t('profile_total_spent')}</span>
                     <b>$${p.total_spent}</b>
                 </div>
             </div>
 
             <!-- Кристаллы -->
             <div class="profile-card">
-                <div class="profile-card-title">💎 Мои кристаллы</div>
+                <div class="profile-card-title">${t('profile_my_crystals')}</div>
                 <div class="profile-crystals-grid">
                     <div class="profile-crystal-stat">
                         <span class="profile-crystal-num">${c.total}</span>
-                        <span class="profile-crystal-label">всего</span>
+                        <span class="profile-crystal-label">${t('profile_total')}</span>
                     </div>
                     <div class="profile-crystal-stat diamonds">
                         <span class="profile-crystal-num">${c.diamonds}</span>
-                        <span class="profile-crystal-label">💎 кристалл</span>
+                        <span class="profile-crystal-label">${t('profile_diamond')}</span>
                     </div>
                     <div class="profile-crystal-stat verified">
                         <span class="profile-crystal-num">${c.verified}</span>
@@ -2664,21 +2765,21 @@ async function loadProfile() {
                     </div>
                     <div class="profile-crystal-stat today">
                         <span class="profile-crystal-num">${c.today}</span>
-                        <span class="profile-crystal-label">сегодня</span>
+                        <span class="profile-crystal-label">${t('profile_today')}</span>
                     </div>
                 </div>
             </div>
 
             <!-- Дневные лимиты -->
             <div class="profile-card">
-                <div class="profile-card-title">📊 Лимиты сегодня</div>
+                <div class="profile-card-title">${t('profile_limits_today')}</div>
                 <div class="profile-limits">${limitsHtml}</div>
-                <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
+                <div class="profile-reset-hint">${t('profile_reset_hint')}</div>
             </div>
 
             <!-- История платежей -->
             <div class="profile-card profile-card-wide">
-                <div class="profile-card-title">💰 История платежей</div>
+                <div class="profile-card-title">${t('profile_payment_history')}</div>
                 <div class="profile-payments">${paymentsHtml}</div>
             </div>
 
