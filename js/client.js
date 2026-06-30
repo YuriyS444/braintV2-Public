@@ -2680,15 +2680,15 @@ async function loadProfile() {
 
             <!-- Кристаллы -->
             <div class="profile-card">
-                <div class="profile-card-title">💎 Мои кристаллы</div>
+                <div class="profile-card-title">${t('profile_my_crystals')}</div>
                 <div class="profile-crystals-grid">
                     <div class="profile-crystal-stat">
                         <span class="profile-crystal-num">${c.total}</span>
-                        <span class="profile-crystal-label">всего</span>
+                        <span class="profile-crystal-label">${t('profile_total')}</span>
                     </div>
                     <div class="profile-crystal-stat diamonds">
                         <span class="profile-crystal-num">${c.diamonds}</span>
-                        <span class="profile-crystal-label">💎 кристалл</span>
+                        <span class="profile-crystal-label">${t('profile_diamond')}</span>
                     </div>
                     <div class="profile-crystal-stat verified">
                         <span class="profile-crystal-num">${c.verified}</span>
@@ -2704,21 +2704,21 @@ async function loadProfile() {
                     </div>
                     <div class="profile-crystal-stat today">
                         <span class="profile-crystal-num">${c.today}</span>
-                        <span class="profile-crystal-label">сегодня</span>
+                        <span class="profile-crystal-label">${t('profile_today')}</span>
                     </div>
                 </div>
             </div>
 
             <!-- Дневные лимиты -->
             <div class="profile-card">
-                <div class="profile-card-title">📊 Лимиты сегодня</div>
+                <div class="profile-card-title">${t('profile_limits_today')}</div>
                 <div class="profile-limits">${limitsHtml}</div>
-                <div class="profile-reset-hint">🔄 Сбрасываются в полночь UTC</div>
+                <div class="profile-reset-hint">${t('profile_reset_hint')}</div>
             </div>
 
             <!-- История платежей -->
             <div class="profile-card profile-card-wide">
-                <div class="profile-card-title">💰 История платежей</div>
+                <div class="profile-card-title">${t('profile_payment_history')}</div>
                 <div class="profile-payments">${paymentsHtml}</div>
             </div>
 
