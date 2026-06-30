@@ -2606,13 +2606,13 @@ function closeProfile() {
 
 async function loadProfile() {
     const body = document.getElementById('profileBody');
-    body.innerHTML = '<div style="text-align:center;padding:40px;opacity:.5">⏳ Загрузка...</div>';
+    body.innerHTML = `<div style="text-align:center;padding:40px;opacity:.5">${t('profile_loading')}</div>`;
 
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) throw new Error('Не удалось загрузить профиль');
+        if (!res.ok) throw new Error(t('profile_load_error'));
         const d = await res.json();
         const p = d.profile;
         const c = d.crystals;
@@ -2629,7 +2629,7 @@ async function loadProfile() {
                 </div>
                 <span class="profile-limit-text">${l.used} / ${l.limit}</span>
             </div>`;
-        }).join('') || '<div class="profile-empty">Нет ограничений на сегодня</div>';
+        }).join('') || `<div class="profile-empty">${t('profile_no_limits')}</div>`;
 
         // История платежей
         const paymentsHtml = d.payments.length
@@ -2643,13 +2643,13 @@ async function loadProfile() {
                     🔗 TX
                 </a>
             </div>`).join('')
-            : '<div class="profile-empty">Платежей пока нет</div>';
+            : `<div class="profile-empty">${t('profile_no_payments')}</div>`;
 
         body.innerHTML = `
         <div class="profile-grid">
 
             <!-- Профиль -->
-             <div class="profile-card">
+            <div class="profile-card">
                 <div class="profile-wallet">
                     <span class="profile-avatar">${p.is_architect ? '👑' : '👤'}</span>
                     <div>
