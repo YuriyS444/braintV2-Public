@@ -59,6 +59,7 @@ const TRANSLATIONS = {
         free: 'Бесплатно',
         // Авторизация
         metamask_connected: '✅ MetaMask подключён',
+        signature_check: '🔍 Проверяем подпись в MetaMask...',
         auth_error: 'Ошибка аутентификации',
         session_expired: 'Сессия истекла. Переподключите MetaMask.',
         apikey_not_set: 'API ключ не задан. Добавьте в настройках.',
@@ -94,6 +95,25 @@ const TRANSLATIONS = {
         filter_science: '🔬 Научный',
         filter_strict: '🔴 Строгий',
         filter_mode_set: 'Режим фильтрации',
+        // Личный кабинет
+        profile_loading: '⏳ Загрузка...',
+        profile_load_error: 'Не удалось загрузить профиль',
+        profile_no_limits: 'Нет ограничений на сегодня',
+        profile_no_payments: 'Платежей пока нет',
+        profile_architect: 'Архитектор',
+        profile_user: 'Пользователь',
+        profile_copy_address: 'Скопировать адрес',
+        profile_registration: '📅 Регистрация',
+        profile_last_login: '🕐 Последний вход',
+        profile_total_queries: '❓ Всего запросов',
+        profile_total_spent: '💸 Потрачено',
+        profile_my_crystals: '💎 Мои кристаллы',
+        profile_total: 'всего',
+        profile_diamond: '💎 кристалл',
+        profile_today: 'сегодня',
+        profile_limits_today: '📊 Лимиты сегодня',
+        profile_reset_hint: '🔄 Сбрасываются в полночь UTC',
+        profile_payment_history: '💰 История платежей',
     },
     en: {
         // Navigation
@@ -127,6 +147,7 @@ const TRANSLATIONS = {
         free: 'Free',
         // Auth
         metamask_connected: '✅ MetaMask connected',
+        signature_check: '🔍 Checking signature in MetaMask...',
         auth_error: 'Authentication error',
         session_expired: 'Session expired. Please reconnect MetaMask.',
         apikey_not_set: 'API key not set. Please add your key in settings.',
@@ -162,6 +183,25 @@ const TRANSLATIONS = {
         filter_science: '🔬 Science',
         filter_strict: '🔴 Strict',
         filter_mode_set: 'Filter mode',
+        // Profile / Account
+        profile_loading: '⏳ Loading...',
+        profile_load_error: 'Failed to load profile',
+        profile_no_limits: 'No limits today',
+        profile_no_payments: 'No payments yet',
+        profile_architect: 'Architect',
+        profile_user: 'User',
+        profile_copy_address: 'Copy address',
+        profile_registration: '📅 Registered',
+        profile_last_login: '🕐 Last login',
+        profile_total_queries: '❓ Total queries',
+        profile_total_spent: '💸 Spent',
+        profile_my_crystals: '💎 My crystals',
+        profile_total: 'total',
+        profile_diamond: '💎 diamond',
+        profile_today: 'today',
+        profile_limits_today: '📊 Limits today',
+        profile_reset_hint: '🔄 Resets at midnight UTC',
+        profile_payment_history: '💰 Payment history',
     }
 };
 
