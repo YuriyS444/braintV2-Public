@@ -413,11 +413,6 @@ async function initWalletConnect() {
         const encoded = encodeURIComponent(uri);
         // metamask:// deeplink открывает MetaMask Mobile и сразу подключает
         window.location.href = `metamask://wc?uri=${encoded}`;
-        // Fallback: если MetaMask не установлен — открываем страницу загрузки
-        setTimeout(() => {
-            window.open('https://metamask.io/download/', '_blank');
-        }, 2000);
-    });
 
     return wcProvider;
 }
