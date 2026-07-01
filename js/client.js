@@ -51,6 +51,14 @@ const TRANSLATIONS = {
         copy_error: '❌ Ошибка копирования',
         auth_required: 'Необходима авторизация через MetaMask',
         connect_to_signin: 'Сохраните ключ от провайдера(ИИ) в настройках',
+        auth_step1: '⚙️ Шаг 1: Введите API ключ провайдера ИИ в настройках (⚙️)',
+        auth_step2: '🦊 Шаг 2: Подключите MetaMask для входа в личный кабинет',
+        install_metamask: 'Установите MetaMask: https://metamask.io',
+        open_metamask_manual: '🦊 Откройте MetaMask и вернитесь в приложение',
+        wallet_status_unavailable: 'Статус недоступен',
+        keys_connect_wallet: 'Подключите кошелёк для управления ключами',
+        keys_load_error: 'Ошибка загрузки',
+        keys_no_saved: 'Нет сохранённых ключей',
         files_unavailable: 'Файлы недоступны на этом уровне',
         stop_generation: '⏹ Генерация остановлена',
         retry: '🔄 Повторить',
@@ -140,6 +148,14 @@ const TRANSLATIONS = {
         copy_error: '❌ Copy error',
         auth_required: 'MetaMask authorization required',
         connect_to_signin: 'Save the provider (AI) key in the settings.',
+        auth_step1: '⚙️ Step 1: Enter your AI provider API key in settings (⚙️)',
+        auth_step2: '🦊 Step 2: Connect MetaMask to access your account',
+        install_metamask: 'Install MetaMask: https://metamask.io',
+        open_metamask_manual: '🦊 Open MetaMask and return to the app',
+        wallet_status_unavailable: 'Status unavailable',
+        keys_connect_wallet: 'Connect wallet to manage keys',
+        keys_load_error: 'Loading error',
+        keys_no_saved: 'No saved keys',
         files_unavailable: 'Files not available at this level',
         stop_generation: '⏹ Generation stopped',
         retry: '🔄 Retry',
@@ -298,7 +314,7 @@ async function updateThreatIndicator() {
         // Не логируем ошибки авторизации — токен мог устареть
         if (!res.ok) {
             el.textContent = '⚪';
-            el.title = 'Статус недоступен';
+            el.title = t('wallet_status_unavailable');
             return;
         }
         const data = await res.json();
@@ -433,18 +449,33 @@ async function connectWallet() {
             provider = window.ethereum;
         } else if (!isMobile && !window.ethereum) {
             // ── ДЕСКТОП без MetaMask ──────────────────────────────────────────
-            showNotification('Установите MetaMask: https://metamask.io', 'error');
+            showNotification(t('install_metamask'), 'error');
             return;
         } else {
             // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
+            // На мобильном window.ethereum недоступен даже при установленном MetaMask
+            // (расширения браузера не работают в Android) — используем WalletConnect
             showNotification(t('open_metamask'), 'info');
-            provider = await initWalletConnect();
-            // Критическое #1: await — ждём аккаунты от MetaMask
+
+            let wcInitError = null;
+            try {
+                provider = await initWalletConnect();
+            } catch (initErr) {
+                wcInitError = initErr;
+            }
+
+            if (!provider) {
+                // WalletConnect не загрузился — пробуем прямой deeplink как fallback
+                console.warn('WalletConnect init failed, trying direct deeplink:', wcInitError?.message);
+                const fallbackUri = `metamask://`;
+                window.location.href = fallbackUri;
+                showNotification(t('open_metamask_manual') || '🦊 Откройте MetaMask и вернитесь в приложение', 'info');
+                return;
+            }
+
             const wcAccounts = await provider.enable();
             if (wcAccounts && wcAccounts.length > 0) wallet = wcAccounts[0];
             window.ethereum = provider;
-            // Слушатель смены сети (#4) — игнорируем во время оплаты,
-            // так как processPayment сам переключает сеть на Polygon
             provider.on('chainChanged', () => {
                 if (window._paymentInProgress) return;
                 window.location.reload();
@@ -458,28 +489,36 @@ async function connectWallet() {
         elements.walletBtn.classList.add('connected');
         showNotification(t('metamask_connected'), 'success');
 
-        const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
-        if (!nonceRes.ok) {
-            const err = await nonceRes.json().catch(() => ({}));
-            throw new Error(err.error || 'Failed to get nonce');
+        if (isMobile) {
+            // ── МОБИЛЬНЫЙ: подпись не требуется при входе ────────────────────
+            // Адрес кошелька сохраняем, подпись запрашивается только при оплате
+            sessionStorage.setItem('brain_wallet', wallet);
+            if (CONFIG.API_KEY) await loginByWallet();
+        } else {
+            // ── ДЕСКТОП: полная авторизация через подпись ────────────────────
+            const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
+            if (!nonceRes.ok) {
+                const err = await nonceRes.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to get nonce');
+            }
+            const nonceData = await nonceRes.json();
+            const nonce   = nonceData.nonce;
+            const message = nonceData.message;
+
+            if (!nonce || !message) throw new Error('Invalid nonce response from server');
+
+            const signature = await provider.request({
+                method: 'personal_sign',
+                params: [message, wallet]
+            });
+
+            if (!signature) throw new Error('MetaMask did not return signature');
+
+            sessionStorage.setItem('wallet_nonce', nonce);
+            sessionStorage.setItem('wallet_signature', signature);
+
+            if (CONFIG.API_KEY) await login();
         }
-        const nonceData = await nonceRes.json();
-        const nonce   = nonceData.nonce;
-        const message = nonceData.message;
-
-        if (!nonce || !message) throw new Error('Invalid nonce response from server');
-
-        const signature = await provider.request({
-            method: 'personal_sign',
-            params: [message, wallet]
-        });
-
-        if (!signature) throw new Error('MetaMask did not return signature');
-
-        sessionStorage.setItem('wallet_nonce', nonce);
-        sessionStorage.setItem('wallet_signature', signature);
-
-        if (CONFIG.API_KEY) await login();
 
     } catch (error) {
         console.error('connectWallet error:', error);
@@ -489,6 +528,67 @@ async function connectWallet() {
     }
 }
 
+
+// Мобильный вход — без подписи, только адрес кошелька + API ключ
+async function loginByWallet() {
+    try {
+        if (!wallet || !CONFIG.API_KEY) return;
+
+        const response = await fetch(`${CONFIG.API_URL}/api/auth/login-wallet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey: CONFIG.API_KEY,
+                wallet
+            })
+        });
+
+        if (!response.ok) {
+            // Fallback — пробуем обычный login если эндпоинт не поддерживается
+            console.warn('login-wallet not supported, falling back to signature login');
+            await requestSignatureAndLogin();
+            return;
+        }
+
+        const data = await response.json();
+        token = data.token;
+        isArchitect = data.isArchitect;
+        sessionStorage.setItem('brain_token', token);
+
+        if (isArchitect) {
+            elements.architectBadge.style.display = 'inline-block';
+            showNotification(t('architect_activated'), 'success');
+        }
+        await loadCrystals();
+
+    } catch (error) {
+        console.error('loginByWallet error:', error);
+        // Fallback на подпись если что-то пошло не так
+        await requestSignatureAndLogin();
+    }
+}
+
+// Fallback — запрашиваем подпись на мобильном если нужно
+async function requestSignatureAndLogin() {
+    try {
+        const nonceRes = await fetch(`${CONFIG.API_URL}/api/auth/nonce?wallet=${wallet}`);
+        if (!nonceRes.ok) return;
+        const { nonce, message } = await nonceRes.json();
+        if (!nonce || !message) return;
+
+        const signature = await window.ethereum.request({
+            method: 'personal_sign',
+            params: [message, wallet]
+        });
+        if (!signature) return;
+
+        sessionStorage.setItem('wallet_nonce', nonce);
+        sessionStorage.setItem('wallet_signature', signature);
+        await login();
+    } catch (err) {
+        console.error('requestSignatureAndLogin error:', err);
+    }
+}
 
 async function login() {
     try {
@@ -1404,7 +1504,7 @@ function finalizeAssistantMessage(id, crystal) {
 
 
 // ============================================================
-// v5.0: Debounce [F11]
+// Debounce [F11]
 // ============================================================
 // debounce определён выше
 
@@ -1585,7 +1685,7 @@ async function loadLevelOptions() {
 }
 
 // ============================================================
-// v5.0: Пользовательское соглашение
+// Пользовательское соглашение
 // ============================================================
 const TERMS_VERSION = 'v5.0-2026-03-11';
 
@@ -1683,14 +1783,12 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-    const serverUrl   = document.getElementById('serverUrl')?.value?.trim();
     const apiKey      = document.getElementById('apiKey')?.value?.trim();
     const archKey     = document.getElementById('architectKey')?.value?.trim();
     const ownerWallet = document.getElementById('ownerWallet')?.value?.trim();
     const provider    = document.getElementById('keyProvider')?.value || 'deepseek';
 
     // Сохраняем локально
-    if (serverUrl)    { localStorage.setItem('brain_api_url', serverUrl);   CONFIG.API_URL = serverUrl; }
     if (archKey)      { sessionStorage.setItem('brain_architect_key', archKey); CONFIG.ARCHITECT_KEY = archKey; }
 
     // Сохраняем API ключ на сервер через PUT /api/auth/keys/:provider
@@ -1734,27 +1832,27 @@ async function saveSettings() {
 async function loadSavedKeys() {
     const container = document.getElementById('savedKeysList');
     if (!container || !token) {
-        if (container) container.textContent = 'Подключите кошелёк для управления ключами';
+        if (container) container.textContent = t('keys_connect_wallet');
         return;
     }
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/auth/keys`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) { container.textContent = 'Ошибка загрузки'; return; }
+        if (!res.ok) { container.textContent = t('keys_load_error'); return; }
         const data = await res.json();
         const providers = data.providers || {};
         const saved = Object.entries(providers).filter(([, v]) => v);
 
         if (saved.length === 0) {
-            container.textContent = 'Нет сохранённых ключей';
+            container.textContent = t('keys_no_saved');
             return;
         }
         container.innerHTML = saved.map(([p]) =>
             `<span>${p} <span class="del-key" onclick="deleteKey('${p}')" title="Удалить">✕</span></span>`
         ).join('');
     } catch {
-        container.textContent = 'Ошибка загрузки';
+        container.textContent = t('keys_load_error');
     }
 }
 
@@ -1779,8 +1877,6 @@ openSettings = function() {
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
     // Заполнить поля текущими значениями
-    const su = document.getElementById('serverUrl');
-    if (su) su.value = CONFIG.API_URL || '';
     modal.style.display = 'flex';
     loadSavedKeys();
 };
@@ -1810,7 +1906,7 @@ function clearHistory() {
     messages.innerHTML = '';
     if (welcome) messages.appendChild(welcome);
     else {
-        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀ v5.0</h1></div>';
+        messages.innerHTML = '<div class="welcome-message" id="welcomeMessage"><div class="welcome-icon">🧠</div><h1>BRAIN T₀</h1></div>';
     }
     history.length = 0;
     sessionStorage.removeItem('brain_history');
@@ -2591,7 +2687,11 @@ function updateLevelSelect(level, price) {
 
 async function openProfile() {
     if (!token) {
-        showNotification(t('connect_to_signin'), 'info');
+        if (!CONFIG.API_KEY) {
+            showNotification(t('auth_step1'), 'info');
+        } else {
+            showNotification(t('auth_step2'), 'info');
+        }
         return;
     }
     document.getElementById('profileModal').style.display = 'flex';
