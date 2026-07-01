@@ -1252,6 +1252,12 @@ async function processPayment(level, price) {
         // Флаг для chainChanged — игнорировать переключение сети во время оплаты
         window._paymentInProgress = true;
 
+        // ── МОБИЛЬНЫЙ: будим MetaMask перед переключением сети ───────────────
+        if (isMobile) {
+            window.location.href = 'metamask://';
+            await new Promise(r => setTimeout(r, 400));
+        }
+
         // Переключаемся на Polygon перед оплатой
         try {
             await window.ethereum.request({
@@ -1282,13 +1288,17 @@ async function processPayment(level, price) {
         }
 
         // USDC на Polygon (6 decimals)
-        // Берём из CONFIG если был загружен с сервера (USDC_CONTRACT_POLYGON env)
         const USDC_CONTRACT = CONFIG.USDC_CONTRACT || '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-        const usdcAmount = Math.floor(price * 1e6); // USDC = 6 decimals
+        const usdcAmount = Math.floor(price * 1e6);
         const amountHex = usdcAmount.toString(16).padStart(64, '0');
         const recipientHex = CONFIG.OWNER_WALLET.slice(2).padStart(64, '0');
-        // transfer(address,uint256) selector = 0xa9059cbb
         const data = '0xa9059cbb' + recipientHex + amountHex;
+
+        // ── МОБИЛЬНЫЙ: будим MetaMask перед отправкой транзакции ─────────────
+        if (isMobile) {
+            window.location.href = 'metamask://';
+            await new Promise(r => setTimeout(r, 400));
+        }
 
         const txHash = await window.ethereum.request({
             method: 'eth_sendTransaction',
