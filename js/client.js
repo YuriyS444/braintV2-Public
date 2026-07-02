@@ -50,6 +50,8 @@ const TRANSLATIONS = {
         payment_recipient: 'Получатель',
         payment_auto: 'После оплаты ответ будет получен автоматически.',
         payment_continue: 'Продолжить?',
+        payment_cancel: 'Отмена',
+        payment_confirm: 'Оплатить',
         syncing: 'Синхронизация...',
         synced: '✅ Синхронизировано',
         import_error: '❌ Ошибка импорта',
@@ -153,6 +155,8 @@ const TRANSLATIONS = {
         payment_recipient: 'Recipient',
         payment_auto: 'After payment, the response will be received automatically.',
         payment_continue: 'Continue?',
+        payment_cancel: 'Cancel',
+        payment_confirm: 'Pay now',
         syncing: 'Syncing...',
         synced: '✅ Synced',
         import_error: '❌ Import error',
@@ -1250,6 +1254,101 @@ function stopGeneration() {
     elements.stopBtn.style.display = 'none';
 }
 
+// Кастомное модальное окно подтверждения оплаты
+// Возвращает Promise<boolean> — true если пользователь нажал "Оплатить"
+function showPaymentConfirm(level, price) {
+    return new Promise((resolve) => {
+        // Убираем старый модал если есть
+        const old = document.getElementById('paymentConfirmModal');
+        if (old) old.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'paymentConfirmModal';
+        modal.style.cssText = `
+            position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.7);
+            display: flex; align-items: center; justify-content: center;
+            animation: fadeIn .2s ease;
+        `;
+
+        const shortWallet = CONFIG.OWNER_WALLET
+            ? `${CONFIG.OWNER_WALLET.slice(0,6)}...${CONFIG.OWNER_WALLET.slice(-4)}`
+            : '—';
+
+        modal.innerHTML = `
+            <div style="
+                background: #13131a; border: 1px solid #7c6af7;
+                border-radius: 16px; padding: 28px 32px;
+                max-width: 380px; width: 90%;
+                box-shadow: 0 8px 40px rgba(124,106,247,0.3);
+                animation: slideUp .25s ease;
+            ">
+                <div style="font-size:22px; font-weight:700; color:#e0e0e0; margin-bottom:20px;">
+                    💳 ${t('payment_title')} ${level}
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:22px;">
+                    <div style="display:flex; justify-content:space-between; padding:10px 14px;
+                        background:#1e1e2e; border-radius:10px;">
+                        <span style="color:#888;">${t('payment_amount')}</span>
+                        <span style="color:#7c6af7; font-weight:700;">${price} USDC</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:10px 14px;
+                        background:#1e1e2e; border-radius:10px;">
+                        <span style="color:#888;">${t('payment_token')}</span>
+                        <span style="color:#e0e0e0;">USDC (Polygon)</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:10px 14px;
+                        background:#1e1e2e; border-radius:10px;">
+                        <span style="color:#888;">${t('payment_recipient')}</span>
+                        <span style="color:#e0e0e0; font-size:13px;">${shortWallet}</span>
+                    </div>
+                </div>
+
+                <div style="font-size:13px; color:#888; margin-bottom:24px; line-height:1.5;">
+                    ${t('payment_auto')}
+                </div>
+
+                <div style="display:flex; gap:12px;">
+                    <button id="payConfirmCancel" style="
+                        flex:1; padding:13px; border-radius:10px;
+                        border:1px solid #333; background:transparent;
+                        color:#888; font-size:15px; cursor:pointer;
+                        transition: border-color .2s;
+                    ">${t('payment_cancel')}</button>
+                    <button id="payConfirmOk" style="
+                        flex:2; padding:13px; border-radius:10px;
+                        border:none; background:#7c6af7;
+                        color:#fff; font-size:15px; font-weight:700;
+                        cursor:pointer; transition: background .2s;
+                    ">💳 ${t('payment_confirm')}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Кнопка Оплатить
+        document.getElementById('payConfirmOk').onclick = () => {
+            modal.remove();
+            resolve(true);
+        };
+
+        // Кнопка Отмена + клик по фону
+        const cancel = () => { modal.remove(); resolve(false); };
+        document.getElementById('payConfirmCancel').onclick = cancel;
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) cancel();
+        });
+
+        // Escape
+        const onKey = (e) => {
+            if (e.key === 'Escape') { cancel(); document.removeEventListener('keydown', onKey); }
+        };
+        document.addEventListener('keydown', onKey);
+    });
+}
+
 async function processPayment(level, price) {
     if (!price || price <= 0) return null;
 
@@ -1277,13 +1376,8 @@ async function processPayment(level, price) {
         return null;
     }
 
-    const confirmed = confirm(
-        `💳 ${t('payment_title')} ${level}\n\n` +
-        `${t('payment_amount')}: ${price} USDC\n` +
-        `${t('payment_token')}: USDC (Polygon)\n` +
-        `${t('payment_recipient')}: ${CONFIG.OWNER_WALLET}\n\n` +
-        `${t('payment_auto')}\n${t('payment_continue')}`
-    );
+    // Кастомное модальное окно вместо браузерного confirm()
+    const confirmed = await showPaymentConfirm(level, price);
     if (!confirmed) return null;
 
     try {
