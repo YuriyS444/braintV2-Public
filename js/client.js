@@ -1258,17 +1258,48 @@ function stopGeneration() {
 // Возвращает Promise<boolean> — true если пользователь нажал "Оплатить"
 function showPaymentConfirm(level, price) {
     return new Promise((resolve) => {
-        // Убираем старый модал если есть
         const old = document.getElementById('paymentConfirmModal');
         if (old) old.remove();
+
+        // Читаем текущую тему
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        const c = isLight ? {
+            overlay:  'rgba(0,0,0,0.45)',
+            bg:       '#ffffff',
+            border:   '#7c6af7',
+            row:      '#f4f4f8',
+            title:    '#1a1a2e',
+            label:    '#666',
+            value:    '#7c6af7',
+            valueAlt: '#333',
+            hint:     '#888',
+            btnCancel:'#e8e8f0',
+            btnCancelText:'#555',
+            btnOk:    '#7c6af7',
+            btnOkText:'#fff',
+        } : {
+            overlay:  'rgba(0,0,0,0.7)',
+            bg:       '#13131a',
+            border:   '#7c6af7',
+            row:      '#1e1e2e',
+            title:    '#e0e0e0',
+            label:    '#888',
+            value:    '#7c6af7',
+            valueAlt: '#e0e0e0',
+            hint:     '#888',
+            btnCancel:'transparent',
+            btnCancelText:'#888',
+            btnOk:    '#7c6af7',
+            btnOkText:'#fff',
+        };
 
         const modal = document.createElement('div');
         modal.id = 'paymentConfirmModal';
         modal.style.cssText = `
-            position: fixed; inset: 0; z-index: 10000;
-            background: rgba(0,0,0,0.7);
-            display: flex; align-items: center; justify-content: center;
-            animation: fadeIn .2s ease;
+            position:fixed; inset:0; z-index:10000;
+            background:${c.overlay};
+            display:flex; align-items:center; justify-content:center;
+            animation:fadeIn .2s ease;
         `;
 
         const shortWallet = CONFIG.OWNER_WALLET
@@ -1277,50 +1308,50 @@ function showPaymentConfirm(level, price) {
 
         modal.innerHTML = `
             <div style="
-                background: #13131a; border: 1px solid #7c6af7;
-                border-radius: 16px; padding: 28px 32px;
-                max-width: 380px; width: 90%;
-                box-shadow: 0 8px 40px rgba(124,106,247,0.3);
-                animation: slideUp .25s ease;
+                background:${c.bg}; border:1px solid ${c.border};
+                border-radius:16px; padding:28px 32px;
+                max-width:380px; width:90%;
+                box-shadow:0 8px 40px rgba(124,106,247,0.25);
+                animation:slideUp .25s ease;
             ">
-                <div style="font-size:22px; font-weight:700; color:#e0e0e0; margin-bottom:20px;">
+                <div style="font-size:20px; font-weight:700; color:${c.title}; margin-bottom:20px;">
                     💳 ${t('payment_title')} ${level}
                 </div>
 
-                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:22px;">
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
                     <div style="display:flex; justify-content:space-between; padding:10px 14px;
-                        background:#1e1e2e; border-radius:10px;">
-                        <span style="color:#888;">${t('payment_amount')}</span>
-                        <span style="color:#7c6af7; font-weight:700;">${price} USDC</span>
+                        background:${c.row}; border-radius:10px;">
+                        <span style="color:${c.label};">${t('payment_amount')}</span>
+                        <span style="color:${c.value}; font-weight:700;">${price} USDC</span>
                     </div>
                     <div style="display:flex; justify-content:space-between; padding:10px 14px;
-                        background:#1e1e2e; border-radius:10px;">
-                        <span style="color:#888;">${t('payment_token')}</span>
-                        <span style="color:#e0e0e0;">USDC (Polygon)</span>
+                        background:${c.row}; border-radius:10px;">
+                        <span style="color:${c.label};">${t('payment_token')}</span>
+                        <span style="color:${c.valueAlt};">USDC (Polygon)</span>
                     </div>
                     <div style="display:flex; justify-content:space-between; padding:10px 14px;
-                        background:#1e1e2e; border-radius:10px;">
-                        <span style="color:#888;">${t('payment_recipient')}</span>
-                        <span style="color:#e0e0e0; font-size:13px;">${shortWallet}</span>
+                        background:${c.row}; border-radius:10px;">
+                        <span style="color:${c.label};">${t('payment_recipient')}</span>
+                        <span style="color:${c.valueAlt}; font-size:13px;">${shortWallet}</span>
                     </div>
                 </div>
 
-                <div style="font-size:13px; color:#888; margin-bottom:24px; line-height:1.5;">
+                <div style="font-size:13px; color:${c.hint}; margin-bottom:22px; line-height:1.5;">
                     ${t('payment_auto')}
                 </div>
 
                 <div style="display:flex; gap:12px;">
                     <button id="payConfirmCancel" style="
                         flex:1; padding:13px; border-radius:10px;
-                        border:1px solid #333; background:transparent;
-                        color:#888; font-size:15px; cursor:pointer;
-                        transition: border-color .2s;
+                        border:1px solid ${isLight ? '#ddd' : '#333'};
+                        background:${c.btnCancel}; color:${c.btnCancelText};
+                        font-size:15px; cursor:pointer;
                     ">${t('payment_cancel')}</button>
                     <button id="payConfirmOk" style="
                         flex:2; padding:13px; border-radius:10px;
-                        border:none; background:#7c6af7;
-                        color:#fff; font-size:15px; font-weight:700;
-                        cursor:pointer; transition: background .2s;
+                        border:none; background:${c.btnOk};
+                        color:${c.btnOkText}; font-size:15px; font-weight:700;
+                        cursor:pointer;
                     ">💳 ${t('payment_confirm')}</button>
                 </div>
             </div>
@@ -1328,23 +1359,11 @@ function showPaymentConfirm(level, price) {
 
         document.body.appendChild(modal);
 
-        // Кнопка Оплатить
-        document.getElementById('payConfirmOk').onclick = () => {
-            modal.remove();
-            resolve(true);
-        };
-
-        // Кнопка Отмена + клик по фону
+        document.getElementById('payConfirmOk').onclick = () => { modal.remove(); resolve(true); };
         const cancel = () => { modal.remove(); resolve(false); };
         document.getElementById('payConfirmCancel').onclick = cancel;
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) cancel();
-        });
-
-        // Escape
-        const onKey = (e) => {
-            if (e.key === 'Escape') { cancel(); document.removeEventListener('keydown', onKey); }
-        };
+        modal.addEventListener('click', (e) => { if (e.target === modal) cancel(); });
+        const onKey = (e) => { if (e.key === 'Escape') { cancel(); document.removeEventListener('keydown', onKey); } };
         document.addEventListener('keydown', onKey);
     });
 }
