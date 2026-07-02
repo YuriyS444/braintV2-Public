@@ -44,6 +44,12 @@ const TRANSLATIONS = {
         connect_wallet: 'Подключите кошелёк',
         connection_error: 'Ошибка подключения: ',
         architect_activated: '👑 Режим архитектора активирован',
+        payment_title: 'Оплата уровня',
+        payment_amount: 'Сумма',
+        payment_token: 'Токен',
+        payment_recipient: 'Получатель',
+        payment_auto: 'После оплаты ответ будет получен автоматически.',
+        payment_continue: 'Продолжить?',
         syncing: 'Синхронизация...',
         synced: '✅ Синхронизировано',
         import_error: '❌ Ошибка импорта',
@@ -141,6 +147,12 @@ const TRANSLATIONS = {
         connect_wallet: 'Connect wallet',
         connection_error: 'Connection error: ',
         architect_activated: '👑 Architect mode activated',
+        payment_title: 'Payment for level',
+        payment_amount: 'Amount',
+        payment_token: 'Token',
+        payment_recipient: 'Recipient',
+        payment_auto: 'After payment, the response will be received automatically.',
+        payment_continue: 'Continue?',
         syncing: 'Syncing...',
         synced: '✅ Synced',
         import_error: '❌ Import error',
@@ -437,8 +449,33 @@ async function initWalletConnect() {
     return wcProvider;
 }
 
+// ── ЕДИНАЯ ТОЧКА ВХОДА ───────────────────────────────────────────────────────
+// Один правильный путь авторизации:
+// 1. Нет API ключа → подсказка ввести ключ
+// 2. Есть ключ, нет кошелька → подключить MetaMask
+// 3. Есть ключ и кошелёк, нет токена → войти
+// 4. Есть токен → открыть личный кабинет
+async function handleAuthEntry() {
+    if (!CONFIG.API_KEY) {
+        showNotification(t('auth_step1'), 'info');
+        return;
+    }
+    if (!wallet) {
+        await connectWallet();
+        return;
+    }
+    if (!token) {
+        isMobile ? await loginByWallet() : await requestSignatureAndLogin();
+        return;
+    }
+    // Всё есть — открываем личный кабинет
+    document.getElementById('profileModal').style.display = 'flex';
+    loadProfile();
+}
+
+
 async function connectWallet() {
-    // Защита от двойного клика (#3)
+    // Защита от двойного клика
     if (connectWallet._running) return;
     connectWallet._running = true;
     try {
@@ -539,7 +576,8 @@ async function loginByWallet() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 apiKey: CONFIG.API_KEY,
-                wallet
+                wallet,
+                architectKey: CONFIG.ARCHITECT_KEY || undefined
             })
         });
 
@@ -1240,11 +1278,11 @@ async function processPayment(level, price) {
     }
 
     const confirmed = confirm(
-        `💳 Оплата уровня ${level}\n\n` +
-        `Сумма: ${price} USDC\n` +
-        `Токен: USDC (Polygon)\n` +
-        `Получатель: ${CONFIG.OWNER_WALLET}\n\n` +
-        `После оплаты ответ будет получен автоматически.\nПродолжить?`
+        `💳 ${t('payment_title')} ${level}\n\n` +
+        `${t('payment_amount')}: ${price} USDC\n` +
+        `${t('payment_token')}: USDC (Polygon)\n` +
+        `${t('payment_recipient')}: ${CONFIG.OWNER_WALLET}\n\n` +
+        `${t('payment_auto')}\n${t('payment_continue')}`
     );
     if (!confirmed) return null;
 
@@ -2696,16 +2734,7 @@ function updateLevelSelect(level, price) {
 // ============================================================
 
 async function openProfile() {
-    if (!token) {
-        if (!CONFIG.API_KEY) {
-            showNotification(t('auth_step1'), 'info');
-        } else {
-            showNotification(t('auth_step2'), 'info');
-        }
-        return;
-    }
-    document.getElementById('profileModal').style.display = 'flex';
-    loadProfile();
+    await handleAuthEntry();
 }
 
 function closeProfile() {
