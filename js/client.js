@@ -494,8 +494,37 @@ async function connectWallet() {
             return;
         } else {
             // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
-            // На мобильном window.ethereum недоступен даже при установленном MetaMask
-            // (расширения браузера не работают в Android) — используем WalletConnect
+            // Сначала проверяем доступность MetaMask через deeplink
+            // Если MetaMask не установлен — deeplink не откроется и страница останется
+            let metaMaskAvailable = false;
+            await new Promise(resolve => {
+                const startTime = Date.now();
+                // Пробуем открыть MetaMask
+                window.location.href = 'metamask://';
+                // Если через 1.5 сек страница ещё видима — MetaMask не установлен
+                const checkTimer = setTimeout(() => {
+                    if (document.visibilityState === 'visible') {
+                        metaMaskAvailable = false;
+                    }
+                    resolve();
+                }, 1500);
+                // Если страница скрылась — MetaMask открылся
+                const onHide = () => {
+                    if (document.visibilityState === 'hidden') {
+                        metaMaskAvailable = true;
+                        clearTimeout(checkTimer);
+                        document.removeEventListener('visibilitychange', onHide);
+                        resolve();
+                    }
+                };
+                document.addEventListener('visibilitychange', onHide);
+            });
+
+            if (!metaMaskAvailable) {
+                showNotification(t('install_metamask'), 'error');
+                return;
+            }
+
             showNotification(t('open_metamask'), 'info');
 
             let wcInitError = null;
