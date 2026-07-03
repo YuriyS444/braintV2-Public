@@ -507,7 +507,7 @@ async function connectWallet() {
                         metaMaskAvailable = false;
                     }
                     resolve();
-                }, 1500);
+                }, 15000);
                 // Если страница скрылась — MetaMask открылся
                 const onHide = () => {
                     if (document.visibilityState === 'hidden') {
