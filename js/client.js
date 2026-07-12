@@ -56,7 +56,6 @@ const TRANSLATIONS = {
         synced: '✅ Синхронизировано',
         import_error: '❌ Ошибка импорта',
         copied: '✅ Скопировано',
-        copy: '📋 Копировать',
         copy_error: '❌ Ошибка копирования',
         auth_required: 'Необходима авторизация через MetaMask',
         connect_to_signin: 'Сохраните ключ от провайдера(ИИ) в настройках',
@@ -162,7 +161,6 @@ const TRANSLATIONS = {
         synced: '✅ Synced',
         import_error: '❌ Import error',
         copied: '✅ Copied',
-        copy: '📋 Copy',
         copy_error: '❌ Copy error',
         auth_required: 'MetaMask authorization required',
         connect_to_signin: 'Save the provider (AI) key in the settings.',
@@ -496,37 +494,8 @@ async function connectWallet() {
             return;
         } else {
             // ── МОБИЛЬНЫЙ: WalletConnect → MetaMask deeplink ─────────────────
-            // Сначала проверяем доступность MetaMask через deeplink
-            // Если MetaMask не установлен — deeplink не откроется и страница останется
-            let metaMaskAvailable = false;
-            await new Promise(resolve => {
-                const startTime = Date.now();
-                // Пробуем открыть MetaMask
-                window.location.href = 'metamask://';
-                // Если через 1.5 сек страница ещё видима — MetaMask не установлен
-                const checkTimer = setTimeout(() => {
-                    if (document.visibilityState === 'visible') {
-                        metaMaskAvailable = false;
-                    }
-                    resolve();
-                }, 1500);
-                // Если страница скрылась — MetaMask открылся
-                const onHide = () => {
-                    if (document.visibilityState === 'hidden') {
-                        metaMaskAvailable = true;
-                        clearTimeout(checkTimer);
-                        document.removeEventListener('visibilitychange', onHide);
-                        resolve();
-                    }
-                };
-                document.addEventListener('visibilitychange', onHide);
-            });
-
-            if (!metaMaskAvailable) {
-                showNotification(t('install_metamask'), 'error');
-                return;
-            }
-
+            // На мобильном window.ethereum недоступен даже при установленном MetaMask
+            // (расширения браузера не работают в Android) — используем WalletConnect
             showNotification(t('open_metamask'), 'info');
 
             let wcInitError = null;
@@ -1717,21 +1686,7 @@ function escapeHtml(text) {
 
 function formatMessage(text) {
     if (!text) return '';
-
-    // ── Блоки кода — обрабатываем ДО escapeHtml ─────────────────────────────
-    const codeBlocks = [];
-    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
-        const escaped = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trimEnd();
-        const langLabel = lang || 'code';
-        const id = 'cb_' + Math.random().toString(36).slice(2, 8);
-        const html = `<div class="code-block"><div class="code-block-header"><span class="code-lang">${langLabel}</span><button class="code-copy-btn" onclick="copyCode('${id}')">${t('copy') || '📋 Копировать'}</button></div><pre id="${id}"><code>${escaped}</code></pre></div>`;
-        const placeholder = `\x00CB${codeBlocks.length}\x00`;
-        codeBlocks.push(html);
-        return placeholder;
-    });
-
     text = escapeHtml(text);
-
     // Заголовки
     text = text.replace(/^### (.+)$/gm, '<h4>$1</h4>');
     text = text.replace(/^## (.+)$/gm, '<h3>$1</h3>');
@@ -1739,19 +1694,16 @@ function formatMessage(text) {
     // Bold и italic
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Инлайн код
-    text = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    // Code
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
     // Списки
     text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
     text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
     text = text.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
     text = text.replace(/(<oli>.*<\/oli>)/gs, '<ol>$1</ol>');
     text = text.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
-    // Переносы строк
+    // Переносы строк (не внутри тегов)
     text = text.replace(/\n/g, '<br>');
-
-    // Восстанавливаем блоки кода
-    text = text.replace(/\x00CB(\d+)\x00/g, (_, i) => codeBlocks[+i]);
     return text;
 }
 
@@ -3064,18 +3016,4 @@ function highlightFilterMode(mode) {
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => showNotification(t('copied'), 'success'));
-}
-
-function copyCode(id) {
-    const pre = document.getElementById(id);
-    if (!pre) return;
-    const code = pre.querySelector('code')?.innerText || pre.innerText;
-    navigator.clipboard.writeText(code).then(() => {
-        const btn = pre.previousElementSibling?.querySelector('.code-copy-btn');
-        if (btn) {
-            const orig = btn.textContent;
-            btn.textContent = '✅ ' + (t('copied') || 'Скопировано');
-            setTimeout(() => { btn.textContent = orig; }, 2000);
-        }
-    });
 }
