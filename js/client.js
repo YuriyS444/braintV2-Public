@@ -1766,7 +1766,10 @@ function autoResize(textarea) {
 function copyMessage(messageId) {
     const msg = document.getElementById(messageId);
     if (!msg) return;
-    const text = msg.querySelector('.message-bubble')?.textContent || '';
+    const bubble = msg.querySelector('.message-bubble');
+    if (!bubble) return;
+    // innerText сохраняет переносы строк, textContent — нет
+    const text = bubble.innerText || bubble.textContent || '';
     navigator.clipboard.writeText(text)
         .then(() => showNotification(t('copied'), 'success'))
         .catch(() => showNotification(t('copy_error'), 'error'));
